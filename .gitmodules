@@ -1,0 +1,3 @@
+[submodule "pyexact"]
+	path = pyexact
+	url = https://github.com/alvarorga/pyexact.git
