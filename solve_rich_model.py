@@ -45,9 +45,9 @@ def der_delta(Delta, L, N, Z, g, Gamma):
     # precission we loose when we solve the linear system Ax = b.
     w = svdvals(A)
     cn = w[-1]/w[0]
-    print(f'Condition number: {cn:4.2e}')
-    print('The derivatives of delta are accurate in the worst case scenario'
-          + f' up to the {16 + np.log10(cn):3.0f}th digit.')
+    # print(f'Condition number: {cn:4.2e}')
+    # print('The derivatives of delta are accurate in the worst case scenario'
+    #       + f' up to the {16 + np.log10(cn):3.0f}th digit.')
 
     return x
 
@@ -73,7 +73,7 @@ def compute_iom_energy(L, N, G, A, B, C, epsilon):
 
     Returns:
         E (float): ground state energy.
-        n (1darray of floats): occupation numbers.
+        derE (float): dE/dg
 
     """
     # Determine the value of the constant Gamma.
@@ -108,6 +108,8 @@ def compute_iom_energy(L, N, G, A, B, C, epsilon):
     # Eigenvalues of the IM.
     ri = -1/2 - delta/2 + g/4*np.sum(Z, axis=1)
     E = 1/lambd[-1]*np.dot(epsilon, ri) + np.sum(epsilon)*(1/2 - 3/4*G)
-    n = compute_particle_number(delta, L, N, Z, g, Gamma)
-
-    return E, n
+    ni = compute_particle_number(delta, L, N, Z, g, Gamma)
+    derE = 0
+    for i in range(L):
+        derE = derE + epsilon[i]*(ri[i]-ni[i]+0.5)/g
+    return E, derE
