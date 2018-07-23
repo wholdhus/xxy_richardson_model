@@ -1,23 +1,17 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from solve_rich_model import compute_iom_energy
+from solve_rg_model import compute_iom_energy_quad
 
-if __name__ == '__main__':
-    
-    steps = 20
-    Ls = [20, 30, 50]
-    glmax = .005
-    colors = ['m', 'c', 'r', 'g', 'y']
-    for j in range(3):
+def plot_energies(A, B, C, steps=30):
+    Ls = [10, 20, 30]
+    glmax = .05
+    colors = ['m', 'c', 'r']
+    for j in range(4):
         L = Ls[j]
         print('Trying system size {}'.format(L))
         N = L//2
         eta = np.sin(np.linspace(1, 2*L-1, L)*np.pi/(4*L))
         epsilon = eta**2
-        # Params for hyperbolic case
-        A = 1
-        B = 4
-        C = 1
         gamma = np.sqrt(B^2-A*C)
         ePlus = (gamma - B)//C
         eMinus = -(gamma + B)//C
@@ -27,12 +21,30 @@ if __name__ == '__main__':
         dEnergy = np.array([0 for i in range(steps)])
         G = np.linspace(0.00001, glmax * L, steps)
         for i in range(steps):
-            energy[i], dEnergy[i] = compute_iom_energy(
+            energy[i], dEnergy[i] = compute_iom_energy_quad(
                     L, N, G[i], A, B, C, epsilon)
         plt.plot(
-            G/L, dEnergy/L, label = "L = {}".format(L), color = colors[j])
-        plt.axvline(Gc/L, ls = '-', color = colors[j])
-    plt.ylabel('(dE/dG)/L')
+            G/L, energy/L, label = "L = {}".format(L), color = colors[j])
+
+
+if __name__ == '__main__':
+    
+    plt.subplot(3, 1, 1)
+    plot_energies(0, 1, 0)
+    plt.ylabel('E/L')
     plt.xlabel('G/L')
     plt.legend()
+
+    plt.subplot(3, 1, 2)
+    plot_energies(0, 1, 0.5)
+    plt.ylabel('E/L')
+    plt.xlabel('G/L')
+    plt.legend()
+
+    plt.subplot(3, 1, 3)
+    plot_energies(0, 1, 1)
+    plt.ylabel('E/L')
+    plt.xlabel('G/L')
+    plt.legend()
+
     plt.show()    

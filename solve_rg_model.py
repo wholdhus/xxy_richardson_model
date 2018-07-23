@@ -1,10 +1,9 @@
-"""Solve the exact energy using the Integrals of motion."""
-"""Modified to take extra cases by WH"""
-
 import numpy as np
 from scipy.linalg import solve, svdvals
 from scipy.optimize import root
 from numba import njit
+
+
 
 
 @njit()
@@ -106,7 +105,7 @@ def compute_iom_energy(L, N, G, model, epsilon):
         g_path = -2*G_path
         for g in g_path:
             sol = root(delta_relations, delta, args=(L, N, Z, g, Gamma),
-                      method='lm')
+                       method='lm')
             delta = sol.x
 
         # Eigenvalues of the IM.
@@ -119,8 +118,8 @@ def compute_iom_energy(L, N, G, model, epsilon):
         lambd = 1/(1 + G_path*(N - L/2 - 1))
         g_path = -G_path*lambd
         for g in g_path:
-            sol = root(delta_relations, delta, args=(L, N, Z, g, Gamma),
-                       method='lm')
+            sol = root(delta_relations, delta, args=(L, N, Z, g, Gamma), 
+                   method='lm')
             delta = sol.x
 
         # Eigenvalues of the IM.
@@ -131,9 +130,9 @@ def compute_iom_energy(L, N, G, model, epsilon):
     return E, n
 
 
-def compute_iom_energy_gen(L, N, G, A, B, C, epsilon):
+def compute_iom_energy_quad(L, N, G, A, B, C, epsilon):
     """Compute the exact energy using the integrals of motion for
-	general-ish case
+	quadratic coupling case.
 
     Args:
         L (int): system's size.
@@ -142,7 +141,6 @@ def compute_iom_energy_gen(L, N, G, A, B, C, epsilon):
         A (float): strength of constant term in Z
         B (float): strength of linear term in Z
         C (float): strength of quadratic term in Z
-		terms in the numerator of Z(i,j).
         epsilon (1darray of floats): epsilon values.
 
     Returns:
@@ -154,6 +152,11 @@ def compute_iom_energy_gen(L, N, G, A, B, C, epsilon):
     Gamma = A*C-B^2
     if Gamma > 0:
         print('Warning: trigonometric case, idk what happens now')
+    # Form some constants that show up in a bit.
+    seps = np.sum(epsilon)
+    seps2 = np.sum(epsilon**2)
+    M = N - L/2
+
     # Compute Z matrix.
     Z = np.zeros((L, L))
     for i in range(L):
@@ -171,17 +174,23 @@ def compute_iom_energy_gen(L, N, G, A, B, C, epsilon):
     G_step = 0.0002
     G_path = np.append(np.arange(0, G, G_step), G)
 
-    # Parametrize g to equivalent integrable Hamiltonian.
-    lambd = 1/(1 + G_path*(N - L/2 - 1))
-    g_path = -G_path*lambd
+    # Parametrize g to equivalent integrable Hamiltonian \sum_i \e_i R_i
+    g_scale = -2/(1 + G_path*(2*B*(M - 1) - C*seps))
+    g_path = G_path*g_scale
+
     for g in g_path:
         sol = root(delta_relations, delta, args=(L, N, Z, g, Gamma),
-                       method='lm')
+                   method='lm')
         delta = sol.x
+    Lambda = 1 + B*G*(M - 1)
+    g = g_path[-1]
 
-    # Eigenvalues of the IM.
+    # Eigenvalues of the IOM.
     ri = -1/2 - delta/2 + g/4*np.sum(Z, axis=1)
-    E = 1/lambd[-1]*np.dot(epsilon, ri) + np.sum(epsilon)*(1/2 - 3/4*G)
+    # Forming energy from scaled IOM
+    const = g*(3*A*L+6*B*seps+C*(seps2-seps**2))/8-A*g*M*(M-1)/2+Lambda*seps/2
+    coeff = 1/(Lambda - g*C*seps/2)
+    E = coeff*(np.dot(epsilon, ri) + const)
     ni = compute_particle_number(delta, L, N, Z, g, Gamma)
     derE = 0
     for i in range(L):
