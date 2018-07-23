@@ -149,7 +149,7 @@ def compute_iom_energy_quad(L, N, G, A, B, C, epsilon):
 
     """
     # Determine the value of the constant Gamma.
-    Gamma = A*C-B^2
+    Gamma = A*C-B**2
     if Gamma > 0:
         print('Warning: trigonometric case, idk what happens now')
     # Form some constants that show up in a bit.
@@ -182,8 +182,8 @@ def compute_iom_energy_quad(L, N, G, A, B, C, epsilon):
         sol = root(delta_relations, delta, args=(L, N, Z, g, Gamma),
                    method='lm')
         delta = sol.x
-    Lambda = 1 + B*G*(M - 1)
     g = g_path[-1]
+    Lambda = 1 + B*g*(M - 1)
 
     # Eigenvalues of the IOM.
     ri = -1/2 - delta/2 + g/4*np.sum(Z, axis=1)
@@ -193,6 +193,6 @@ def compute_iom_energy_quad(L, N, G, A, B, C, epsilon):
     E = coeff*(np.dot(epsilon, ri) + const)
     ni = compute_particle_number(delta, L, N, Z, g, Gamma)
     derE = 0
-    for i in range(L):
-        derE = derE + epsilon[i]*(ri[i]-ni[i]+0.5)/g
+    # for i in range(L):
+    #     derE = derE + epsilon[i]*(ri[i]-ni[i]+0.5)/g
     return E, derE
