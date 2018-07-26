@@ -26,6 +26,7 @@ def delta_relations(Delta, L, N, Z, g, Gamma):
 
 def der_delta(Delta, L, N, Z, g, Gamma):
     """Compute the derivatives of Delta (Eqs 5 and 6)."""
+    """Used for particle numbers mostly"""
     A = np.diag(Delta + 1 - g/2*np.sum(Z, axis=1)) + g*Z/2
     b = (g*N*(L-N)*Gamma*np.ones(L) + np.sum(Z, axis=1)*Delta/2
          - np.dot(Z, Delta)/2)
@@ -111,7 +112,7 @@ def compute_iom_energy(L, N, G, model, epsilon):
         # Eigenvalues of the IM.
         ri = -1/2 - delta/2 + g/4*np.sum(Z, axis=1)
         E = np.dot(epsilon, ri) + np.sum(epsilon)/2 + G*((N-L/2)**2 - N - L/4)
-        n = compute_particle_number(delta, L, N, Z, g, Gamma)
+        # n = compute_particle_number(delta, L, N, Z, g, Gamma)
 
     elif model == 'hyperbolic':
         # Parametrize g to equivalent integrable Hamiltonian.
@@ -125,9 +126,9 @@ def compute_iom_energy(L, N, G, model, epsilon):
         # Eigenvalues of the IM.
         ri = -1/2 - delta/2 + g/4*np.sum(Z, axis=1)
         E = 1/lambd[-1]*np.dot(epsilon, ri) + np.sum(epsilon)*(1/2 - 3/4*G)
-        n = compute_particle_number(delta, L, N, Z, g, Gamma)
+        # n = compute_particle_number(delta, L, N, Z, g, Gamma)
 
-    return E, n
+    return E
 
 
 def compute_iom_energy_quad(L, N, G, A, B, C, epsilon):
@@ -150,8 +151,8 @@ def compute_iom_energy_quad(L, N, G, A, B, C, epsilon):
     """
     # Determine the value of the constant Gamma.
     Gamma = A*C-B**2
-    if Gamma > 0:
-        print('Warning: trigonometric case, idk what happens now')
+    # if Gamma > 0:
+        # print('Warning: trigonometric case, idk what happens now')
     # Form some constants that show up in a bit.
     seps = np.sum(epsilon)
     seps2 = np.sum(epsilon**2)
@@ -191,8 +192,4 @@ def compute_iom_energy_quad(L, N, G, A, B, C, epsilon):
     const = g*(3*A*L+6*B*seps+C*(seps2-seps**2))/8-A*g*M*(M-1)/2+Lambda*seps/2
     coeff = 1/(Lambda - g*C*seps/2)
     E = coeff*(np.dot(epsilon, ri) + const)
-    ni = compute_particle_number(delta, L, N, Z, g, Gamma)
-    derE = 0
-    # for i in range(L):
-    #     derE = derE + epsilon[i]*(ri[i]-ni[i]+0.5)/g
-    return E, derE
+    return E
