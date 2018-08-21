@@ -58,7 +58,7 @@ def compute_particle_number(Delta, L, N, Z, g, Gamma):
     return n
 
 
-def compute_iom_energy(L, N, G, model, epsilon):
+def compute_iom_energy(L, N, G, model, epsilon, G_step=0.0002):
     """Compute the exact energy using the integrals of motion.
 
     Args:
@@ -98,7 +98,6 @@ def compute_iom_energy(L, N, G, model, epsilon):
     delta[eps_min[:N]] = -2
 
     # Points over which we will iterate until we reach G.
-    G_step = 0.0002
     G_path = np.append(np.arange(0, G, G_step), G)
     if model == 'rational':
         # Lowercase g is the interaction strength of the equivalent
@@ -112,7 +111,7 @@ def compute_iom_energy(L, N, G, model, epsilon):
         # Eigenvalues of the IM.
         ri = -1/2 - delta/2 + g/4*np.sum(Z, axis=1)
         E = np.dot(epsilon, ri) + np.sum(epsilon)/2 + G*((N-L/2)**2 - N - L/4)
-        # n = compute_particle_number(delta, L, N, Z, g, Gamma)
+        n = compute_particle_number(delta, L, N, Z, g, Gamma)
 
     elif model == 'hyperbolic':
         # Parametrize g to equivalent integrable Hamiltonian.
@@ -126,12 +125,12 @@ def compute_iom_energy(L, N, G, model, epsilon):
         # Eigenvalues of the IM.
         ri = -1/2 - delta/2 + g/4*np.sum(Z, axis=1)
         E = 1/lambd[-1]*np.dot(epsilon, ri) + np.sum(epsilon)*(1/2 - 3/4*G)
-        # n = compute_particle_number(delta, L, N, Z, g, Gamma)
+        n = compute_particle_number(delta, L, N, Z, g, Gamma)
 
-    return E
+    return E, n
 
 
-def compute_iom_energy_quad(L, N, G, A, B, C, epsilon):
+def compute_iom_energy_quad(L, N, G, A, B, C, epsilon, G_step=0.0002):
     """Compute the exact energy using the integrals of motion for
 	quadratic coupling case.
 
@@ -172,7 +171,6 @@ def compute_iom_energy_quad(L, N, G, A, B, C, epsilon):
     delta[eps_min[:N]] = -2
 
     # Points over which we will iterate until we reach G.
-    G_step = 0.0002
     G_path = np.append(np.arange(0, G, G_step), G)
 
     # Parametrize g to equivalent integrable Hamiltonian \sum_i \e_i R_i
@@ -192,4 +190,25 @@ def compute_iom_energy_quad(L, N, G, A, B, C, epsilon):
     const = g*(3*A*L+6*B*seps+C*(seps2-seps**2))/8-A*g*M*(M-1)/2+Lambda*seps/2
     coeff = 1/(Lambda - g*C*seps/2)
     E = coeff*(np.dot(epsilon, ri) + const)
-    return E
+    
+    # Forming dEdG
+    dDelta = der_delta(delta, L, N, Z, g, Gamma)
+    dri = -1/2*dDelta + 1/4*np.sum(Z, axis=1)
+    dg = -2./(1+G*(2*B*(M-1)-C*seps))**2
+    dcoeff = -A*M*(M-1)/2+(3*A*L+6*B*seps+C*(seps2-seps**2))/8+B*(M-1)*seps/2
+    
+    dEdG = dg*(C*seps*coeff**2/2 * (np.dot(epsilon, ri) + const)
+            + coeff*(np.dot(epsilon, dri) + dcoeff))
+
+    n = compute_particle_number(delta, L, N, Z, g, Gamma)
+    return E, dEdG, n
+
+if __name__ == "__main__":
+    L = 50
+    eta = np.sin(np.linspace(1, 2*L-1, L)*np.pi/(4*L))
+    epsilon = eta**2
+    N = L//2
+    E, dE, n = compute_iom_energy_quad(L, N, 0.01, 1, 2, 1, epsilon)
+    print('Energy is {}'.format(E))
+    print('dEdG is {}'.format(dE))
+
