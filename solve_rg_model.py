@@ -47,7 +47,7 @@ def der_delta(Delta, L, N, Z, g, Gamma):
     cn = w[-1]/w[0]
     # print(f'Condition number: {cn:4.2e}')
     # print('The derivatives of delta are accurate in the worst case scenario'
-    #       + f' up to the {16 + np.log10(cn):3.0f}th digit.')
+          # + f' up to the {16 + np.log10(cn):3.0f}th digit.')
 
     return x
 
@@ -58,7 +58,9 @@ def compute_particle_number(Delta, L, N, Z, g, Gamma):
     return n
 
 
-def compute_iom_energy(L, N, G, model, epsilon, G_step=0.0002):
+def compute_iom_energy(L, N, G, model, epsilon, 
+        # steps=10):
+        G_step=0.02):
     """Compute the exact energy using the integrals of motion.
 
     Args:
@@ -98,7 +100,19 @@ def compute_iom_energy(L, N, G, model, epsilon, G_step=0.0002):
     delta[eps_min[:N]] = -2
 
     # Points over which we will iterate until we reach G.
-    G_path = np.append(np.arange(0, G, G_step), G)
+    if G>=0:
+        G_path = np.append(np.arange(0, G, G_step), G)
+    else:
+        G_path = np.append(np.arange(0, -G, G_step), -G)
+        G_path = -G_path
+    # if G==0:
+        # G_path = np.array([0.])
+    # elif G<0:
+        # G_path = np.linspace(0, -G, steps)
+        # G_path = -G_path
+    # else:
+        # G_path = np.linspace(0, G, steps)
+    # print("G_path is {}".format(G_path))
     if model == 'rational':
         # Lowercase g is the interaction strength of the equivalent
         # integrable Hamiltonian.
@@ -121,6 +135,10 @@ def compute_iom_energy(L, N, G, model, epsilon, G_step=0.0002):
             sol = root(delta_relations, delta, args=(L, N, Z, g, Gamma), 
                    method='lm')
             delta = sol.x
+        dr = delta_relations(delta, L, N, Z, g, Gamma)
+        if np.max(dr)> 10**-10:
+            print('WARNING: Largest error in quadratic solution is {}'.format(
+                np.max(dr)))
 
         # Eigenvalues of the IM.
         ri = -1/2 - delta/2 + g/4*np.sum(Z, axis=1)

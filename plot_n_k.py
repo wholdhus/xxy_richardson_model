@@ -1,43 +1,52 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from matplotlib.widgets import Slider
 from solve_rg_model import compute_iom_energy_quad, compute_iom_energy
+from pyexact.build_mb_hamiltonian import build_mb_hamiltonian
+from pyexact.expected import compute_P
 
-def plot_n_quad(A, B, C, g, L):
-    N = L//2
+
+def plot_n_quad(L, N, A, B, C, G):
     eta = np.sin(np.linspace(1, 2*L-1, L)*np.pi/(4*L))
     epsilon = eta**2
     energy, denergy, n = compute_iom_energy_quad(
-            L, N, g, A, B, C, epsilon)
+            L, N, -G, A, B, C, epsilon)
     plt.plot(
-        n, label = "L = {}".format(L))
+        n, label = "G = {}".format(round(-G, 3)))
 
 
-def plot_n_k(L):
-    N = L//2
-    k = 2*np.pi*np.linspace(1., L, L)/L
-    epsilon = k**2
-    # eta = np.sin(np.linspace(1, 2*L-1, L)*np.pi/(4*L))
-    # epsilon = eta**2
-    # Gmr = 1/(L-N+1)
-    # G = np.linspace(0.001, Gmr+0.004, 5)
-    G = np.linspace(0.001, 0.4)
-    plt.subplot(2, 1, 1)
-    for g in G:
-        E, n = compute_iom_energy(L, N, g, 'hyperbolic', epsilon)
-        plt.plot(
-                n[:-L//4], label = "G = {}".format(g))
-    # plt.legend()
-    plt.subplot(2, 1, 2)
-    for g in G:
-        E, n = compute_iom_energy(L, N, -g, 'hyperbolic', epsilon)
-        plt.plot(
-                n[:-L//4], label = "G = {}".format(-g))
-    # plt.legend()
+def plot_n_k(L, N, G):
+    eta = np.sin(np.linspace(1, 2*L-1, L)*np.pi/(4*L))
+    epsilon = eta**2
+    E, n = compute_iom_energy(L, N, -G, 'hyperbolic', epsilon)
+    plt.plot(
+            n, label = "G = {}".format(round(-G,3)))
+    plt.legend()
+
+
+def compare_exact(G, L):
+    N = 3*L//4
+    eta = np.sin(np.linspace(1, 2*L-1, L)*np.pi/(4*L))
+    epsilon = eta**2
+    sqeps = np.sqrt(epsilon)
+    J = -G*np.outer(sqeps, sqeps)+np.diag(epsilon)
+    D = np.zeros((L, L), np.float64)
+    H = build_mb_hamiltonian(
+            J, D, L, N)
+    w, v = np.linalg.eig(H)
+    v = v.T[0]
+    P = compute_P(v, L, N)
+    n_exact = np.diag(P)
+
+    E, n = compute_iom_energy(L, N, G, 'hyperbolic', epsilon)
+
+    print('Max difference between n_k values is {}'.format(
+        np.max(n_exact - n)))
+    print('N = {}'.format(sum(n)))
+    plt.plot(n_exact, label = 'n_exact')
+    plt.plot(n, label = 'n')
+    plt.legend()
 
 
 if __name__ == '__main__':
-    # plot_n_quad(4., 2., 1., 0.05, 50)
-    plot_n_k(500)
-    # plt.legend()
-    plt.show() 
+    compare_exact(-0.1, 12)
+    plt.show()
