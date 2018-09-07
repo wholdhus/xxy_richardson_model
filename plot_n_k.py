@@ -1,4 +1,5 @@
 import numpy as np
+import pandas as pd
 import matplotlib.pyplot as plt
 from solve_rg_model import compute_iom_energy_quad, compute_iom_energy
 from pyexact.build_mb_hamiltonian import build_mb_hamiltonian
@@ -23,8 +24,7 @@ def plot_n_k(L, N, G):
     plt.legend()
 
 
-def compare_exact(G, L):
-    N = 3*L//4
+def compare_exact(G, L, N):
     eta = np.sin(np.linspace(1, 2*L-1, L)*np.pi/(4*L))
     epsilon = eta**2
     sqeps = np.sqrt(epsilon)
@@ -37,16 +37,23 @@ def compare_exact(G, L):
     P = compute_P(v, L, N)
     n_exact = np.diag(P)
 
-    E, n = compute_iom_energy(L, N, G, 'hyperbolic', epsilon)
+    E, n, delta = compute_iom_energy(L, N, G, 'hyperbolic', epsilon,
+                    return_delta=True)
 
-    print('Max difference between n_k values is {}'.format(
-        np.max(n_exact - n)))
-    print('N = {}'.format(sum(n)))
     plt.plot(n_exact, label = 'n_exact')
     plt.plot(n, label = 'n')
     plt.legend()
+    return n, n_exact, delta
 
 
 if __name__ == '__main__':
-    compare_exact(-0.1, 12)
+    G = float(input('G: '))
+    L = int(input('L: '))
+    N = int(input('N: '))
+    filename = '{}_{}_{}.csv'.format(
+            L, N, G)
+    n, n_exact, delta = compare_exact(G, L, N)
+    data = pd.DataFrame(
+            {'n_k quad': n, 'n_k diag': n_exact, 'delta': delta})
+    data.to_csv(filename)
     plt.show()

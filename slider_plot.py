@@ -6,7 +6,7 @@ from solve_rg_model import compute_iom_energy_quad, compute_iom_energy
 from pyexact.build_mb_hamiltonian import build_mb_hamiltonian
 from pyexact.expected import compute_P
 
-L = 12
+L = 8
 fig, ax = plt.subplots(figsize=(12,8))
 N = 3*L//4
 # N = L//4
@@ -49,14 +49,18 @@ plt.legend()
 
 slideraxis = plt.axes([0.2, 0.05, 0.65, 0.03])
 
-sG = Slider(slideraxis, 'G', 0., 10./L, valinit=0) # good range for 3/4 fill
-# sG = Slider(slideraxis, 'G', 0.26, 0.30, valinit=0) # focuses on where things break for exact
-# sG = Slider(slideraxis, 'G', 0., 1000./L, valinit=0) good range for 3/4 fill
+# axis for seeing all 3/4 fill behavior
+# sG = Slider(slideraxis, 'G', 0., 10./L, valinit=0)
+# axis for seeing where exact model flickers
+# sG = Slider(slideraxis, 'G', 0.28, 0.31, valinit=0)
+# axis for seeing where quadratic solutions fail
+sG = Slider(slideraxis, 'G', 0.95, 1.1, valinit=0.9)
 
 def update(val):
     G = -sG.val
     print('Computing energies for G={}'.format(G))
-    E, n = compute_iom_energy(L, N, G, 'hyperbolic', epsilon)
+    E, n = compute_iom_energy(L, N, G, 'hyperbolic', epsilon,
+            G_step=0.002)
     Ee, ne = compute_n_exact(G, L, N, epsilon)
     print('Energy diff: {}'.format(Ee-E))
     nk.set_ydata(n)
