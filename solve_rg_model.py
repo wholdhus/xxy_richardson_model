@@ -60,7 +60,8 @@ def compute_particle_number(Delta, L, N, Z, g, Gamma):
 
 def compute_iom_energy(L, N, G, model, epsilon, 
         # steps=10):
-        G_step=0.0002, return_delta=False):
+        steps=100, return_delta=False,
+        taylor_expand=True):
     """Compute the exact energy using the integrals of motion.
 
     Args:
@@ -99,52 +100,55 @@ def compute_iom_energy(L, N, G, model, epsilon,
     eps_min = np.argsort(epsilon)
     delta[eps_min[:N]] = -2
 
-    # Points over which we will iterate until we reach G.
-    if G>=0:
-        G_path = np.append(np.arange(0, G, G_step), G)
+    # Finding value of g (used in numerics) corresponding to G
+    if model =='rational':
+        g_final= -2*G
+    else: # hyperbolic
+        np.seterr(all='raise')
+        lambd = 1/(1 + G*(N - L/2 - 1))
+        g_final = -G*lambd
+    
+    # Points over which we will iterate until we reach g_final.
+    g_step = np.abs(g_final)/steps
+    print('Step size is {}'.format(g_step))
+    g_path = [0]
+    if g_final > 0:
+        g_path = np.append(np.arange(0, g_final, g_step), g_final)
+    elif g_final < 0:
+        g_path = -np.append(np.arange(0, -g_final, g_step), -g_final)
+    print(g_path)
+    inc = np.all(g_path[1:] >= g_path[:-1])
+    dec = np.all(g_path[1:] <= g_path[:-1])
+    if inc:
+        print('g_path is increasing')
+    elif dec:
+        print('g_path is decreasing')
     else:
-        G_path = np.append(np.arange(0, -G, G_step), -G)
-        G_path = -G_path
-    Ginc = np.all(G_path[1:] >= G_path[:-1])
-    Gdec = np.all(G_path[1:] <= G_path[:-1])
-    if Ginc:
-        print('G_path is increasing')
-    elif Gdec:
-        print('G_path is decreasing')
-    else:
-        print('Something is wrong with G_path')
-        print(G_path)
-    # if G==0:
-        # G_path = np.array([0.])
-    # elif G<0:
-        # G_path = np.linspace(0, -G, steps)
-        # G_path = -G_path
-    # else:
-        # G_path = np.linspace(0, G, steps)
-    # print("G_path is {}".format(G_path))
-
-    # setting up path to take while varying g
-    if model == 'rational':
-        # Lowercase g is the interaction strength of the equivalent
-        # integrable Hamiltonian.
-        g_path = -2*G_path
-
-    elif model == 'hyperbolic':
-        # Parametrize g to equivalent integrable Hamiltonian.
-        lambd = 1/(1 + G_path*(N - L/2 - 1))
-        g_path = -G_path*lambd
+        print('Something is wrong with g_path')
+        print(g_path)
 
     # finding root while varying g, using prev. solution to start
     for g in g_path:
-        sol = root(delta_relations, delta, args=(L, N, Z, g, Gamma), 
-                   method='lm')
+        if not np.isnan(g): # skipping steps where lambd broke
+            sol = root(delta_relations, delta, args=(L, N, Z, g, Gamma), 
+                       method='lm')
+        if np.isnan(g):
+            print('Division by 0 problem at g={}'.format(g))
         delta = sol.x
+
+        if taylor_expand and g != g_final:
+            # Now applying taylor approx for next delta(g+dg)
+            # Not doing this for final g value
+            ddelta = der_delta(delta, L, N, Z, g, Gamma)
+            delta = delta + g_step*ddelta
 
     # checking accuracy of solutions
     dr = delta_relations(delta, L, N, Z, g, Gamma)
     if np.max(dr)> 10**-12:
         print('WARNING: Largest error in quadratic solution is {}'.format(
             np.max(dr)))
+        print('Differences are:')
+        print(dr)
     
     # Now forming eigenvalues of IM and observables
     if model == 'rational':
@@ -156,7 +160,7 @@ def compute_iom_energy(L, N, G, model, epsilon,
     elif model == 'hyperbolic':
         # Eigenvalues of the IM.
         ri = -1/2 - delta/2 + g/4*np.sum(Z, axis=1)
-        E = 1/lambd[-1]*np.dot(epsilon, ri) + np.sum(epsilon)*(1/2 - 3/4*G)
+        E = 1/lambd*np.dot(epsilon, ri) + np.sum(epsilon)*(1/2 - 3/4*G)
         n = compute_particle_number(delta, L, N, Z, g, Gamma)
 
     if return_delta:
