@@ -41,9 +41,9 @@ def compare_exact(G, L, N):
                     return_delta=True)
 
     plt.plot(n_exact, label = 'n_exact')
-    plt.plot(n, label = 'n')
+    plt.plot(n, label = 'n', ls = ':')
     plt.legend()
-    return n, n_exact, delta
+    return n, n_exact, delta, epsilon
 
 
 if __name__ == '__main__':
@@ -52,8 +52,9 @@ if __name__ == '__main__':
     N = int(input('N: '))
     filename = '{}_{}_{}.csv'.format(
             L, N, G)
-    n, n_exact, delta = compare_exact(G, L, N)
+    n, n_exact, delta, epsilon = compare_exact(G, L, N)
     data = pd.DataFrame(
-            {'n_k quad': n, 'n_k diag': n_exact, 'delta': delta})
+            {'n_k quad': n, 'n_k diag': n_exact, 'delta': delta,
+                'epsilon': epsilon})
     data.to_csv(filename)
     plt.show()
