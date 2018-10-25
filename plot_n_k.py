@@ -2,8 +2,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from solve_rg_model import compute_iom_energy_quad, compute_iom_energy
-from pyexact.build_mb_hamiltonian import build_mb_hamiltonian
-from pyexact.expected import compute_P
+from exact_diag import compute_n_exact
 
 
 def plot_n_quad(L, N, A, B, C, G):
@@ -28,14 +27,7 @@ def compare_exact(G, L, N):
     eta = np.sin(np.linspace(1, 2*L-1, L)*np.pi/(4*L))
     epsilon = eta**2
     sqeps = np.sqrt(epsilon)
-    J = -G*np.outer(sqeps, sqeps)+np.diag(epsilon)
-    D = np.zeros((L, L), np.float64)
-    H = build_mb_hamiltonian(
-            J, D, L, N)
-    w, v = np.linalg.eig(H)
-    v = v.T[0]
-    P = compute_P(v, L, N)
-    n_exact = np.diag(P)
+    E_exact, n_exact = compute_n_exact(L, N, G, epsilon)
 
     E, n, delta = compute_iom_energy(L, N, G, 'hyperbolic', epsilon,
                     return_delta=True)
