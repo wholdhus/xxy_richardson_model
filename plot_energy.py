@@ -1,6 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from solve_rg_model import compute_iom_energy_quad, compute_iom_energy
+from solve_rg_model import compute_hyperbolic_energy
 from exact_diag import compute_n_exact, compute_E
 
 def Gofg(g, L, N, A, B, C, seps):
@@ -22,14 +23,20 @@ def find_Gc(A, B, C, L, N, seps):
 
 def plot_hyp_energy(epsilon=None, L=10, dens = 3/4, 
                     steps=50, diag=True, filename=None,
-                    escale=None, gsteps=100,
-                    use_fixed=True):
-    model = 'hyperbolic'
-    # k = np.pi*np.linspace(0.0, L, L)/L
-    # epsilon = k**2
+                    escale=None, initial_steps = 10,
+                    final_steps = 400, use_fixed=True):
+    # gsteps is the number of steps I will increment
+    # G in the numerics. It seems like this should
+    # We generally need a higher number of steps for higher
+    # coupling, so this should let us do the easy cases quickly.
+    gsteps = np.linspace(np.sqrt(initial_steps),
+        np.sqrt(final_steps), 5)**2
+    gsteps = gsteps.astype(int)
+    print(gsteps)
+    
     t1 = 1
     t2 = 0
-    k = np.pi*np.linspace(0.0, L, L)/L
+    k = np.linspace(-np.pi, 0, L)
     eta = np.sin(k/2)*np.sqrt(t1 + 4*t2*(np.cos(k/2))**2)
     epsilon = eta**2
 
@@ -40,6 +47,8 @@ def plot_hyp_energy(epsilon=None, L=10, dens = 3/4,
     print('Critical g is {}'.format(Gc*L))
     gcc = -Gc/(1-Gc+Gc*(N-L/2))
     print('In the numerics this is g = {}'.format(gcc))
+    Gmr = 1./(L-N+1)
+    print('Moore-Read line is at {}'.format(Gmr*L))
     Gp = 1./(1-N+L/2)
     print('We will have trouble around g={}'.format(
         Gp*L))
@@ -49,14 +58,26 @@ def plot_hyp_energy(epsilon=None, L=10, dens = 3/4,
         Gs = -np.linspace(1.5*Gc, -1.5*Gc, steps)
     gs = L*Gs
     energy = np.zeros(steps)
+
+    j = 0 # index of current gstep
     for i in range(steps):
         if L < 13:
             te = True
         else:
             te = False # there are problems with t.e. for large systems
-        eq = compute_iom_energy(L, N, Gs[i], model, epsilon, steps=gsteps,
-                taylor_expand=False, return_n=False,
-                use_fixed_rels=use_fixed)
+        eq, success = compute_hyperbolic_energy(L, N, Gs[i], epsilon,
+                steps=gsteps[j], taylor_expand=te, return_n=False)
+        if not success:
+            while j < len(gsteps):
+                while not success:
+                    print('Computation of energy was bad at G={}'.format(Gs[i]))
+                    print('This was with {} steps. Now trying with {} steps'.format(
+                        gsteps[j], gsteps[j+1]))
+                    j=j+1
+                    eq, success = compute_hyperbolic_energy(L, N, Gs[i], epsilon,
+                            steps=gsteps[j], taylor_expand=te, return_n=False)
+                if not success:
+                    print('Energy computation was bad but we\'ll live with it')
         energy[i] = eq
 
     denergy = np.gradient(energy, gs)
@@ -73,29 +94,30 @@ def plot_hyp_energy(epsilon=None, L=10, dens = 3/4,
         d3ee = np.gradient(d2ee, gs) 
 
     plt.subplot(2,1,1)
-    plt.plot(gs, energy/L, label='energy', color = 'black')
+    plt.plot(gs, energy/L, label='New method', color = 'black')
     if L <13:
         plt.plot(gs, eenergy/L, linestyle = ':',
                 color = 'c',
-                label='energy from diag')
+                label='Diagonalization')
         plt.legend()
-    plt.xlabel('G*L')
-    plt.ylabel('E/L')
-    plt.title('L = {}'.format(L))
+    # plt.xlabel('G*L')
+    plt.ylabel('g')
+    plt.title('L = {}, N = {}'.format(L, N))
 
     plt.subplot(2,1,2)
     l = len(d3energy)
     plt.plot(gs[:l], d3energy/L,
-            label='3rd deriv from quads', color = 'black')
+            label='New method', color = 'black')
     if L < 13:
         plt.plot(gs[:l], d3ee/L,
                 linestyle=':',
                 color = 'c',
-                label='3rd deriv from diag')
+                label='Diagonalization')
         plt.legend()
-    plt.axvline(Gc*L)
-    plt.xlabel('G*L')
-    plt.ylabel('E\'\'\'/L')
+    plt.axvline(Gc*L, color = 'r')
+    plt.axvline(Gmr*L, color = 'b')
+    plt.xlabel('g')
+    plt.ylabel('d3e/dg')
 
 
     if filename is not None:
@@ -142,7 +164,8 @@ def plot_energy_derivs(A, B, C, L, steps=11):
 if __name__ == '__main__':
     L = int(input('Number of sites: '))
     dens = float(input('Density: '))
-    steps = int(input('Number of steps to increment G: '))
+    steps = int(input('Max number of steps to increment g: '))
+    samples = int(input('Number of samples for derivative: '))
     use_fixed = input('Use fixed delta relations? ')
     if use_fixed == 'Y':
         use_fixed = True
@@ -153,8 +176,8 @@ if __name__ == '__main__':
     if sav == 'Y':
         save = True
         filename = input('Savefile: ')
-    plot_hyp_energy(L=L, dens=dens, steps=100,
-                    gsteps=steps,
+    plot_hyp_energy(L=L, dens=dens, steps=samples,
+                    final_steps=steps,
                     filename=filename,
                     use_fixed=use_fixed)
     plt.show()

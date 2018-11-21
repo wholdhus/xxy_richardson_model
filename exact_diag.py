@@ -1,4 +1,5 @@
 import numpy as np
+import scipy.sparse as sparse
 from pyexact.build_mb_hamiltonian import build_mb_hamiltonian
 from pyexact.expected import compute_P
 from quspin.basis import boson_basis_1d
@@ -10,9 +11,11 @@ def compute_n_exact(L, N, G, epsilon):
     J = -G*np.outer(sqeps, sqeps) + np.diag(epsilon)
     D = np.zeros((L,L), float)
     H = build_mb_hamiltonian(J, D, L, N)
-    # print(H)
-    w, v = np.linalg.eigh(H)
-    # TODO: how does np order these? seems significant
+    if L < 13:
+        # print(H)
+        w, v = np.linalg.eigh(H)
+    else:
+        w, v = sparse.linalg.eigsh(H, 10)
     minindex = np.argmin(w)
     E = w[minindex]
     v = v.T[minindex]
