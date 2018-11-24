@@ -6,12 +6,25 @@ from numba import njit
 
 
 @njit()
-def delta_relations(Delta, L, N, Z, g, Gamma):
+
+
+def c2r(carray):
+    real = carray.real
+    imag = carray.imag
+    return real, imag
+
+
+def r2c(real, imag):
+    carray = real + 1j*imag
+    return carray
+
+
+def delta_relations(Delta, L, N, Z, g, Gamma, inittype=np.float64):
     """Express the relations of the Delta parameters (Eqs 3 and 4).
 
     The relations have the form of a vector whose entries are zeros.
     """
-    rels = np.zeros(L+1, np.float64)
+    rels = np.zeros(L+1, inittype)
 
     # Eq 3.
     rels[:L] = (-Delta**2 + g**2*N*(L-N)*Gamma - 2*Delta
@@ -21,6 +34,14 @@ def delta_relations(Delta, L, N, Z, g, Gamma):
     rels[L] = np.sum(Delta) + 2*N
 
     return rels
+
+
+def delta_relations_c(cDelta, L, N, Z, g, Gamma):
+    # turning a 2L real delta into a L complex delta
+    Delta = cDelta[:L] + 1j*cDelta[L:]
+    re, im = c2r(delta_relations(Delta, L, N, Z, g, Gamma,
+        inittype=np.complex))
+    return np.append(re, im)
 
 
 def delta_rels_fixed(Delta, L, N, thingies, g, Gamma, epsilon):
@@ -77,9 +98,22 @@ def compute_particle_number(Delta, L, N, Z, g, Gamma):
     n = -Delta/2 + g/2*der_delta(Delta, L, N, Z, g, Gamma)
     return n
 
-def compute_hyperbolic_energy(L, N, G, epsilon, 
-        steps=100, return_delta=False, return_n=True,
-        taylor_expand=False):
+
+def create_z_matrix(L, epsilon, iscomplex=True):
+    # Compute Z matrix.
+    if not iscomplex:
+        Z = np.zeros((L, L))
+    else:
+        Z = np.zeros((L,L),dtype=np.complex_)
+    for i in range(L):
+        for j in range(i):  # j < i.
+            Z[i, j] = (epsilon[i] + epsilon[j])/(epsilon[i]-epsilon[j])
+            Z[j, i] = -Z[i, j]
+    return Z
+
+
+def compute_hyperbolic_deltas(L, N, G, epsilon, 
+        gsteps=100, imsteps=100, taylor_expand=False):
     """Compute the exact energy using the integrals of motion.
 
     Args:
@@ -95,16 +129,9 @@ def compute_hyperbolic_energy(L, N, G, epsilon,
     """
     Gamma = -1 # hyperbolic case
 
-    # Compute Z matrix.
-    Z = np.zeros((L, L))
-    for i in range(L):
-        for j in range(i):  # j < i.
-            Z[i, j] = (epsilon[i] + epsilon[j])/(epsilon[i]-epsilon[j])
-            Z[j, i] = -Z[i, j]
-
     # Initial values for Delta with g small. The -2 values (initially
     # occupied states) go where the epsilons are smallest.
-    delta = np.zeros(L, np.float64)
+    delta = np.zeros(L, dtype=np.complex_)
     eps_min = np.argsort(epsilon)
     delta[eps_min[:N]] = -2
 
@@ -114,53 +141,67 @@ def compute_hyperbolic_energy(L, N, G, epsilon,
     g_final = -G*lambd
     
     # Points over which we will iterate until we reach g_final.
-    g_step = np.abs(g_final)/steps
+    g_step = np.abs(g_final)/gsteps
+    print('Step size for g is {}'.format(g_step))
 
-    g_path = np.linspace(0, np.abs(g_final), steps)
+    g_path = np.linspace(0, np.abs(g_final), gsteps,
+            dtype=np.complex_)
     if g_final > 0:
         g_path = np.append(np.arange(0, g_final, g_step), g_final)
     elif g_final < 0:
         g_path = -np.append(np.arange(0, -g_final, g_step), -g_final)
+    # imaginary part is alternating 0 and 1 to differentiate adjacent
+    # epsilons
+    ims = np.array([1j if i%2==0 else 0 for i in range(L)])
+    # Adding to epsilon to keep the epsilon values far apart
+    epsilon_im = epsilon + ims
+    Z = create_z_matrix(L, epsilon_im, iscomplex=True)
+    rdelta, idelta = c2r(delta)
+    combdelta = np.append(rdelta, idelta)
     # Finding root while varying g, using prev. solution to start
     for g in g_path:
-        if not np.isnan(g): # skipping steps where lambd broke
-            sol = root(delta_relations, delta, args=(L, N, Z, g, Gamma),
-                       method='lm')
-        if np.isnan(g):
-            print('Division by 0 problem at g={}'.format(g))
-        delta = sol.x
+        sol = root(
+                delta_relations_c, combdelta, args=(L, N, Z, g, Gamma), 
+                method='lm')
+        combdelta = sol.x
 
-        if taylor_expand and g != g_final:
-            # Now applying taylor approx for next delta(g+dg)
-            # Not doing this for final g value
-            try:
-                ddelta = der_delta(delta, L, N, Z, g, Gamma,
-                                   throw=True)
-                delta = delta + g_step*ddelta
-            except Exception as e:
-                print('Problem with derivatives: {}'.format(e))
+        # if taylor_expand and g != g_final:
+            # # Now applying taylor approx for next delta(g+dg)
+            # # Not doing this for final g value
+            # try:
+                # ddelta = der_delta(delta, L, N, Z, g, Gamma,
+                                   # throw=True)
+                # delta = delta + g_step*ddelta
+            # except Exception as e:
+                # print('Problem with derivatives: {}'.format(e))
+    
+    # Now iterate while reducing imaginary part of epsilon
+    imscale = np.linspace(1,0, imsteps)
+    for s in imscale:
+        epsilon_im = epsilon + s*ims
+        Z = create_z_matrix(L, epsilon_im, iscomplex=True)
+        sol = root(
+                delta_relations_c, combdelta, args=(L, N, Z, g, Gamma), 
+                method='lm')
+        combdelta = sol.x 
+    rdelta = combdelta[:L]
+    imdelta = combdelta[L:]
+    delta = rdelta + 1j*imdelta
 
     # checking accuracy of solutions
     dr = delta_relations(delta, L, N, Z, g, Gamma)
-    if np.max(dr)> 10**-12:
+    if np.max(dr)> 10**-13:
         print('WARNING: At G= {} error is {}'.format( 
                 G, np.max(dr)))
         success = False
     else: # at least reasonably accurate
         success = True
-        
-    # Now forming eigenvalues of IM and observables
     ri = -1/2 - delta/2 + g/4*np.sum(Z, axis=1)
     E = 1/lambd*np.dot(epsilon, ri) + np.sum(epsilon)*(1/2 - 3/4*G)
-    if return_n:
-        n = compute_particle_number(delta, L, N, Z, g, Gamma)
+    n = compute_particle_number(delta, L, N, Z, g, Gamma)
+        
+    return E, n, delta, success
 
-    if return_delta and return_n:
-        return E, n, delta, success
-    elif return_n:
-        return E, n, success
-    else:
-        return E, success
 
 def compute_iom_energy(L, N, G, model, epsilon, 
         steps=100, return_delta=False, return_n=True,
@@ -223,16 +264,6 @@ def compute_iom_energy(L, N, G, model, epsilon,
         g_path = -np.append(np.arange(0, -g_final, g_step), -g_final)
     inc = np.all(g_path[1:] >= g_path[:-1])
     dec = np.all(g_path[1:] <= g_path[:-1])
-    if inc:
-        # print('g_path is increasing')
-        pass
-    elif dec:
-        # print('g_path is decreasing')
-        pass
-    else:
-        print('Something is wrong with g_path')
-        print(g_path)
-    # print(g_path)
     # finding root while varying g, using prev. solution to start
     for g in g_path:
         if not np.isnan(g): # skipping steps where lambd broke
