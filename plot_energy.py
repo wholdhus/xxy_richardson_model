@@ -2,7 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from solve_rg_model import compute_iom_energy_quad, compute_iom_energy
 from solve_rg_model import compute_hyperbolic_energy
-from exact_diag import compute_n_exact, compute_E
+# from exact_diag import compute_n_exact, compute_E
 
 def Gofg(g, L, N, A, B, C, seps):
     M = N - L/2
@@ -20,8 +20,28 @@ def find_Gc(A, B, C, L, N, seps):
     Gmr = Gofg(gmr, L, N, A, B, C, seps)
     return Gc, Gmr
 
+def plot_energy(L, N, steps, Gmax, hold):
+    dpoints = 20
+    if Gmax > 0:
+        Gs = np.linspace(-1.5*Gmax, 1.5*Gmax, steps)
+    else:
+        Gs = -np.linspace(1.5*Gmax, -1.5*Gmax, steps)
+    # Gs = Gmax*np.linspace(0,1,dpoints)
+    Es = np.zeros(dpoints)
+    t1 = 1
+    t2 = 0
+    k = np.linspace(0, 1, L)*np.pi/L
+    eta = np.sin(k/2)*np.sqrt(t1 + 4*t2*(np.cos(k/2))**2)
+    epsilon = eta**2
+    for i, G in enumerate(Gs):
+        E, N, delta, s = compute_hyperbolic_energy(L, N, G,
+                epsilon, steps=steps, holdover=hold)
+        Es[i] = E
+    plt.plot(Gs, Es)
+    plt.show()
 
-def plot_hyp_energy(epsilon=None, L=10, dens = 3/4, 
+
+def plot_hyp_energy(epsilon=None, L=10, dens = 3/4,
                     steps=50, diag=True, filename=None,
                     escale=None, initial_steps = 10,
                     final_steps = 400, use_fixed=True):
@@ -33,7 +53,7 @@ def plot_hyp_energy(epsilon=None, L=10, dens = 3/4,
         np.sqrt(final_steps), 5)**2
     gsteps = gsteps.astype(int)
     print(gsteps)
-    
+
     t1 = 1
     t2 = 0
     k = np.linspace(-np.pi, 0, L)
@@ -83,7 +103,7 @@ def plot_hyp_energy(epsilon=None, L=10, dens = 3/4,
     denergy = np.gradient(energy, gs)
     d2energy = np.gradient(denergy, gs)
     d3energy = np.gradient(d2energy, gs)
-    
+
     if L < 13: # small enough to diagonalize
         eenergy = np.zeros(steps)
         for i in range(steps):
@@ -91,7 +111,7 @@ def plot_hyp_energy(epsilon=None, L=10, dens = 3/4,
             eenergy[i] = ee
         dee = np.gradient(eenergy, gs)
         d2ee = np.gradient(dee, gs)
-        d3ee = np.gradient(d2ee, gs) 
+        d3ee = np.gradient(d2ee, gs)
 
     plt.subplot(2,1,1)
     plt.plot(gs, energy/L, label='New method', color = 'black')
@@ -163,21 +183,11 @@ def plot_energy_derivs(A, B, C, L, steps=11):
 
 if __name__ == '__main__':
     L = int(input('Number of sites: '))
-    dens = float(input('Density: '))
-    steps = int(input('Max number of steps to increment g: '))
-    samples = int(input('Number of samples for derivative: '))
-    use_fixed = input('Use fixed delta relations? ')
-    if use_fixed == 'Y':
-        use_fixed = True
-    else:
-        use_fixed = False
-    filename = None
-    sav = input('Save file? Y/N ')
-    if sav == 'Y':
-        save = True
-        filename = input('Savefile: ')
-    plot_hyp_energy(L=L, dens=dens, steps=samples,
-                    final_steps=steps,
-                    filename=filename,
-                    use_fixed=use_fixed)
+    N = int(input('Occuppied sites: '))
+    Gc = 1/(L-2*N + 1)
+    print('Critical G is {}'.format(Gc))
+    G = float(input('Maximum G: '))
+    hold = float(input('Holdover fraction: '))
+    steps = int(input('Steps: '))
+    plot_energy(L, N, steps, G, hold)
     plt.show()

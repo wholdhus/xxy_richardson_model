@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 from matplotlib.widgets import Slider
 import matplotlib.animation as animation
 from solve_rg_model import compute_iom_energy_quad, compute_iom_energy
-from exact_diag import compute_n_exact
+# from exact_diag import compute_n_exact
 
 L = int(input('System length: '))
 dens = float(input('Density: '))
@@ -33,9 +33,9 @@ E, n, delta = compute_iom_energy(L, N, G, 'hyperbolic', epsilon,
 
 # nk, = plt.plot(k, delta, label='not exact', color = 'black')
 nk, = plt.plot(k, n, label='not exact', color = 'black')
-if L < 13:
-    Ee, ne = compute_n_exact(L, N, G, epsilon)
-    nke, = plt.plot(k, ne, label='exact', ls='--', color = 'c')
+# if L < 13:
+    # Ee, ne = compute_n_exact(L, N, G, epsilon)
+    # nke, = plt.plot(k, ne, label='exact', ls='--', color = 'c')
 
 plt.legend()
 
@@ -55,11 +55,11 @@ def update(val):
             return_delta=True)
     # nk.set_ydata(delta)
     nk.set_ydata(n)
-    if L < 13:
-        Ee, ne = compute_n_exact(L, N, G, epsilon)
-        if Ee-E > 10**-10:
-            print('Energy diff {} at G='.format(Ee-E, G))
-        nke.set_ydata(ne)
+    # if L < 13:
+        # Ee, ne = compute_n_exact(L, N, G, epsilon)
+        # if Ee-E > 10**-10:
+            # print('Energy diff {} at G='.format(Ee-E, G))
+        # nke.set_ydata(ne)
     fig.canvas.draw_idle()
 
 sG.on_changed(update)

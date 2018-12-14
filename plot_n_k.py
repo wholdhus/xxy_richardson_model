@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-from solve_rg_model import compute_iom_energy_quad, compute_iom_energy
+from solve_rg_model import compute_iom_energy_quad, compute_iom_energy, compute_hyperbolic_energy
 
 
 def plot_n_quad(L, N, A, B, C, G):
@@ -27,7 +27,7 @@ def plot_n_k(L, N, G):
     plt.legend()
 
 
-def compare_exact(G, L, N, steps):
+def compare_exact(G, L, N, steps, hold):
     t1 = 1
     t2 = 0
     # t1 = 0.1
@@ -36,11 +36,10 @@ def compare_exact(G, L, N, steps):
     eta = np.sin(k/2)*np.sqrt(t1 + 4*t2*(np.cos(k/2))**2)
     epsilon = eta**2
 
-    E, n, delta = compute_iom_energy(L, N, G, 'hyperbolic', epsilon,
-                    steps=steps, taylor_expand=False,
-                    return_delta=True)
+    E, n, delta, _ = compute_hyperbolic_energy(L, N, G, epsilon,
+            steps=steps, holdover=hold)
     print('Energy is {}'.format(E))
-    plt.plot(k[:L-20], n[:L-20], label = 'New method')
+    plt.plot(k, n, label = '{}, {}'.format(steps, hold))
     n_exact = [0 for i in range(L)]
     if L < 13:
         from exact_diag import compute_n_exact
@@ -50,9 +49,15 @@ def compare_exact(G, L, N, steps):
         plt.plot(k, n_exact, label = 'Diagonalization', ls = ':')
     plt.xlabel('k')
     plt.ylabel('n_k')
-    plt.legend()
     return n, n_exact, delta, epsilon
 
+
+def test_holdovers(G, L, N, steps, hmax):
+    holds = np.linspace(0, hmax, 5)
+    for h in holds:
+        compare_exact(G, L, N, steps, h)
+    plt.legend()
+    plt.show()
 
 if __name__ == '__main__':
     L = int(input('L: '))
@@ -64,11 +69,14 @@ if __name__ == '__main__':
     except:
         print('Woops: half filling!')
     G = float(input('G: '))
-    filename = '{}_{}_{}.csv'.format(
-            L, N, G)
-    n, n_exact, delta, epsilon = compare_exact(G, L, N, steps)
+    h = float(input('Holdover fraction: '))
+
+    test_holdovers(G, L, N, steps, h)
+    # filename = '{}_{}_{}.csv'.format(
+            # L, N, G)
+    # n, n_exact, delta, epsilon = compare_exact(G, L, N, steps, h)
     # data = pd.DataFrame(
             # {'n_k quad': n, 'n_k diag': n_exact, 'delta': delta,
                 # 'epsilon': epsilon})
     # data.to_csv(filename)
-    plt.show()
+    # plt.show()

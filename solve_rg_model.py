@@ -53,7 +53,7 @@ def der_delta(Delta, L, N, Z, g, Gamma, throw=False):
         A[i] = A[i] - A[i, -1]
     A = A[:-1, :-1]
     b = b[:-1]
-    
+
     # Compute the condition number of A. It quantifies how much
     # precision we loose when we solve the linear system Ax = b.
     # w = svdvals(A)
@@ -77,9 +77,9 @@ def compute_particle_number(Delta, L, N, Z, g, Gamma):
     n = -Delta/2 + g/2*der_delta(Delta, L, N, Z, g, Gamma)
     return n
 
-def compute_hyperbolic_energy(L, N, G, epsilon, 
-        steps=100, return_delta=False, return_n=True,
-        taylor_expand=False):
+
+def compute_hyperbolic_energy(L, N, G, epsilon,
+        gstep=0.001, holdover=0, eArray=False):
     """Compute the exact energy using the integrals of motion.
 
     Args:
@@ -106,63 +106,67 @@ def compute_hyperbolic_energy(L, N, G, epsilon,
     # occupied states) go where the epsilons are smallest.
     delta = np.zeros(L, np.float64)
     eps_min = np.argsort(epsilon)
-    delta[eps_min[:N]] = -2
+    delta[eps_min[:N]] = -2.0
 
     # Finding value of g (used in numerics) corresponding to G
     # np.seterr(all='raise')
     lambd = 1/(1 + G*(N - L/2 - 1))
     g_final = -G*lambd
-    
-    # Points over which we will iterate until we reach g_final.
-    g_step = np.abs(g_final)/steps
 
-    g_path = np.linspace(0, np.abs(g_final), steps)
-    if g_final > 0:
-        g_path = np.append(np.arange(0, g_final, g_step), g_final)
-    elif g_final < 0:
-        g_path = -np.append(np.arange(0, -g_final, g_step), -g_final)
+    # Points over which we will iterate until we reach g_final.
+    # g_step = np.abs(g_final)/steps
+    steps = g_final/gstep
+    print(steps)
+    g_path = g_final * np.linspace(0, 1, steps)
+    # g_path = np.linspace(0, np.abs(g_final), steps)
+    # if g_final > 0:
+        # g_path = np.append(np.arange(0, g_final, g_step), g_final)
+    # elif g_final < 0:
+        # g_path = -np.append(np.arange(0, -g_final, g_step), -g_final)
+
+    if eArray:
+        Es = np.zeros(len(g_path))
+
     # Finding root while varying g, using prev. solution to start
-    for g in g_path:
+    for i, g in enumerate(g_path):
+        last = delta
         if not np.isnan(g): # skipping steps where lambd broke
             sol = root(delta_relations, delta, args=(L, N, Z, g, Gamma),
                        method='lm')
         if np.isnan(g):
             print('Division by 0 problem at g={}'.format(g))
-        delta = sol.x
+            delta = (1 - holdover ) * sol.x + holdover * last
+        if eArray:
+            ri = -1/2 - delta/2 + g/4*np.sum(Z, axis=1)
+            Es[i] = 1/lambd*np.dot(epsilon, ri) + np.sum(
+                    epsilon)*(1/2 - 3/4*G)
+    # now doing final time without holdover
+    sol = root(delta_relations, delta, args=(L, N, Z, g_final, Gamma),
+                method='lm')
+    delta = sol.x
 
-        if taylor_expand and g != g_final:
-            # Now applying taylor approx for next delta(g+dg)
-            # Not doing this for final g value
-            try:
-                ddelta = der_delta(delta, L, N, Z, g, Gamma,
-                                   throw=True)
-                delta = delta + g_step*ddelta
-            except Exception as e:
-                print('Problem with derivatives: {}'.format(e))
 
     # checking accuracy of solutions
-    dr = delta_relations(delta, L, N, Z, g, Gamma)
+    dr = delta_relations(delta, L, N, Z, g_final, Gamma)
     if np.max(dr)> 10**-12:
-        print('WARNING: At G= {} error is {}'.format( 
+        print('WARNING: At G= {} error is {}'.format(
                 G, np.max(dr)))
         success = False
     else: # at least reasonably accurate
         success = True
-        
+    print('Error is {}'.format(np.max(dr)))
+
     # Now forming eigenvalues of IM and observables
-    ri = -1/2 - delta/2 + g/4*np.sum(Z, axis=1)
+    ri = -1/2 - delta/2 + g_final/4*np.sum(Z, axis=1)
     E = 1/lambd*np.dot(epsilon, ri) + np.sum(epsilon)*(1/2 - 3/4*G)
-    if return_n:
-        n = compute_particle_number(delta, L, N, Z, g, Gamma)
-
-    if return_delta and return_n:
-        return E, n, delta, success
-    elif return_n:
-        return E, n, success
+    n = compute_particle_number(delta, L, N, Z, g_final, Gamma)
+    if not eArray:
+        return E, n, dr, success
     else:
-        return E, success
+        return E, n, Es, success
 
-def compute_iom_energy(L, N, G, model, epsilon, 
+
+def compute_iom_energy(L, N, G, model, epsilon,
         steps=100, return_delta=False, return_n=True,
         taylor_expand=True, use_fixed_rels=False):
     """Compute the exact energy using the integrals of motion.
@@ -209,7 +213,7 @@ def compute_iom_energy(L, N, G, model, epsilon,
         np.seterr(all='raise')
         lambd = 1/(1 + G*(N - L/2 - 1))
         g_final = -G*lambd
-    
+
     # Points over which we will iterate until we reach g_final.
     g_step = np.abs(g_final)/steps
     if g_step > 0.02:
@@ -242,7 +246,7 @@ def compute_iom_energy(L, N, G, model, epsilon,
                     for j in range(i):
                         thingies[i, j] = 1./(epsilon[i] - epsilon[j])
                         thingies[j, i] = -thingies[i, j]
-                sol = root(delta_rels_fixed, delta, args=(L, N, thingies, 
+                sol = root(delta_rels_fixed, delta, args=(L, N, thingies,
                             g, Gamma, epsilon),method='lm')
             else:
                 sol = root(delta_relations, delta, args=(L, N, Z, g, Gamma),
@@ -268,7 +272,7 @@ def compute_iom_energy(L, N, G, model, epsilon,
     else:
         dr = delta_relations(delta, L, N, Z, g, Gamma)
     if np.max(dr)> 10**-12:
-        print('WARNING: At G= {} error is {}'.format( 
+        print('WARNING: At G= {} error is {}'.format(
                 G, np.max(dr)))
         # relerror = dr[:(L-1)]/delta
         # print('Average relative error is {}'.format(np.max(relerror)))
@@ -278,7 +282,7 @@ def compute_iom_energy(L, N, G, model, epsilon,
         # print(dr)
         # print('Max delta is currently:')
         # print(np.max(np.abs(delta)))
-    
+
     # Now forming eigenvalues of IM and observables
     if model == 'rational':
         # Eigenvalues of the IM.
@@ -294,8 +298,6 @@ def compute_iom_energy(L, N, G, model, epsilon,
         if return_n:
             n = compute_particle_number(delta, L, N, Z, g, Gamma)
 
-    # print('Max delta is {}'.format(np.max(np.abs(delta))))
-    # print('This is at index {}'.format(np.argmax(np.abs(delta))))
     if return_delta and return_n:
         return E, n, delta
     elif return_n:
@@ -364,13 +366,13 @@ def compute_iom_energy_quad(L, N, G, A, B, C, epsilon, G_step=0.0002):
     const = g*(3*A*L+6*B*seps+C*(seps2-seps**2))/8-A*g*M*(M-1)/2+Lambda*seps/2
     coeff = 1/(Lambda - g*C*seps/2)
     E = coeff*(np.dot(epsilon, ri) + const)
-    
+
     # Forming dEdG
     dDelta = der_delta(delta, L, N, Z, g, Gamma)
     dri = -1/2*dDelta + 1/4*np.sum(Z, axis=1)
     dg = -2./(1+G*(2*B*(M-1)-C*seps))**2
     dcoeff = -A*M*(M-1)/2+(3*A*L+6*B*seps+C*(seps2-seps**2))/8+B*(M-1)*seps/2
-    
+
     dEdG = dg*(C*seps*coeff**2/2 * (np.dot(epsilon, ri) + const)
             + coeff*(np.dot(epsilon, dri) + dcoeff))
 
