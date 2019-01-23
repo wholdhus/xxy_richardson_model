@@ -4,6 +4,7 @@ from solve_rg_model import compute_iom_energy_quad, compute_iom_energy
 from solve_rg_model import compute_hyperbolic_energy
 from exact_diag import compute_n_exact, compute_E
 
+
 def Gofg(g, L, N, A, B, C, seps):
     M = N - L/2
     lamb = 1+B*g*(M-1)
@@ -21,27 +22,20 @@ def find_Gc(A, B, C, L, N, seps):
     return Gc, Gmr
 
 
-def plot_hyp_energy(epsilon=None, L=10, dens = 3/4, 
-                    steps=50, diag=True, filename=None,
-                    escale=None, initial_steps = 10,
-                    final_steps = 400, use_fixed=True):
+def plot_hyp_energy(epsilon=None, L=10, dens = 3/4,
+        steps=50, g_step=0.001, diag=True, filename=None):
     # gsteps is the number of steps I will increment
     # G in the numerics. It seems like this should
     # We generally need a higher number of steps for higher
     # coupling, so this should let us do the easy cases quickly.
-    gsteps = np.linspace(np.sqrt(initial_steps),
-        np.sqrt(final_steps), 5)**2
-    gsteps = gsteps.astype(int)
-    print(gsteps)
-    
     t1 = 1
     t2 = 0
-    k = np.linspace(-np.pi, 0, L)
-    eta = np.sin(k/2)*np.sqrt(t1 + 4*t2*(np.cos(k/2))**2)
-    epsilon = eta**2
+    k = np.pi*np.linspace(0, 1, L)
+    # eta = np.sin(k/2)*np.sqrt(t1 + 4*t2*(np.cos(k/2))**2)
+    # epsilon = eta**2
+    # epsilon = -0.5 * t1 * (np.cos(k) - 1) - 0.5 * t2 * (np.cos(2*k) -1)
+    epsilon = k**2
 
-    if escale is not None:
-        epsilon = epsilon*escale
     N = int(L*dens)
     Gc = 1./(L - 2*N + 1)
     print('Critical g is {}'.format(Gc*L))
@@ -52,38 +46,41 @@ def plot_hyp_energy(epsilon=None, L=10, dens = 3/4,
     Gp = 1./(1-N+L/2)
     print('We will have trouble around g={}'.format(
         Gp*L))
+    print('New weird point is g= {}'.format(2.0*L/(N-1)))
+    Gnew = 2.0/(N-1)
     if Gc > 0:
         Gs = np.linspace(-1.5*Gc, 1.5*Gc, steps)
     else:
-        Gs = -np.linspace(1.5*Gc, -1.5*Gc, steps)
+        Gs = np.linspace(5*Gc, 0.5*Gc, steps)
+    # Gs = np.linspace(5*Gc, 0.75*Gc, steps)
     gs = L*Gs
-    energy = np.zeros(steps)
+    energy1 = np.zeros(steps)
+    energy2 = np.zeros(steps)
+    energy3 = np.zeros(steps)
+    for i, G in enumerate(Gs):
+        print('{}th step, G = {}'.format(i, G))
+        # if G !=0:
+            # gsteps = int(np.abs(G)/g_step)
+        # else:
+            # gsteps = 1
+        # # print(gsteps)
+        # energy1[i] = compute_iom_energy(L, N,
+                # G, 'hyperbolic', epsilon, steps = gsteps,
+                # return_n = False,
+                # taylor_expand = False)
+        energy1[i], n, d1, success = compute_hyperbolic_energy(
+                L, N, G, epsilon, g_step=g_step,
+                taylor_expand=False, holdover=0)
+        # energy2[i], n, d2, success = compute_hyperbolic_energy(
+                # L, N, G, epsilon, g_step=g_step,
+                # taylor_expand=False, holdover=0.1)
+        # energy3[i], n, d3, success = compute_hyperbolic_energy(
+                # L, N, G, epsilon, g_step=g_step,
+                # taylor_expand=False, holdover=0.25)
 
-    j = 0 # index of current gstep
-    for i in range(steps):
-        if L < 13:
-            te = True
-        else:
-            te = False # there are problems with t.e. for large systems
-        eq, success = compute_hyperbolic_energy(L, N, Gs[i], epsilon,
-                steps=gsteps[j], taylor_expand=te, return_n=False)
-        if not success:
-            while j < len(gsteps):
-                while not success:
-                    print('Computation of energy was bad at G={}'.format(Gs[i]))
-                    print('This was with {} steps. Now trying with {} steps'.format(
-                        gsteps[j], gsteps[j+1]))
-                    j=j+1
-                    eq, success = compute_hyperbolic_energy(L, N, Gs[i], epsilon,
-                            steps=gsteps[j], taylor_expand=te, return_n=False)
-                if not success:
-                    print('Energy computation was bad but we\'ll live with it')
-        energy[i] = eq
-
-    denergy = np.gradient(energy, gs)
+    denergy = np.gradient(energy1, gs)
     d2energy = np.gradient(denergy, gs)
     d3energy = np.gradient(d2energy, gs)
-    
     if L < 13: # small enough to diagonalize
         eenergy = np.zeros(steps)
         for i in range(steps):
@@ -91,93 +88,53 @@ def plot_hyp_energy(epsilon=None, L=10, dens = 3/4,
             eenergy[i] = ee
         dee = np.gradient(eenergy, gs)
         d2ee = np.gradient(dee, gs)
-        d3ee = np.gradient(d2ee, gs) 
+        d3ee = np.gradient(d2ee, gs)
 
-    plt.subplot(2,1,1)
-    plt.plot(gs, energy/L, label='New method', color = 'black')
+    plt.subplot(3,1,1)
+    plt.plot(gs, energy1/L)
+    plt.scatter(gs, energy1/L, s=5)
+    # plt.axvline(-L*Gnew)
+    # plt.plot(gs, energy2/L, label='Holdover .25', linestyle = ':')
+    # plt.plot(gs, energy3/L, label='Holdover .5', linestyle = ':')
     if L <13:
         plt.plot(gs, eenergy/L, linestyle = ':',
                 color = 'c',
                 label='Diagonalization')
         plt.legend()
     # plt.xlabel('G*L')
-    plt.ylabel('g')
+    plt.xlabel('g')
     plt.title('L = {}, N = {}'.format(L, N))
 
-    plt.subplot(2,1,2)
-    l = len(d3energy)
-    plt.plot(gs[:l], d3energy/L,
-            label='New method', color = 'black')
-    if L < 13:
-        plt.plot(gs[:l], d3ee/L,
-                linestyle=':',
-                color = 'c',
-                label='Diagonalization')
-        plt.legend()
+    plt.subplot(3,1,2)
+    plt.plot(gs[5:-5], d3energy[5:-5]/L)
+    plt.scatter(gs[5:-5], d3energy[5:-5]/L)
+    # plt.axvline(-L*Gnew)
+    # if L < 13:
+        # plt.plot(gs[:l], d3ee/L,
+                # linestyle=':',
+                # color = 'c',
+                # label='Diagonalization')
     plt.axvline(Gc*L, color = 'r')
-    plt.axvline(Gmr*L, color = 'b')
+    # plt.axvline(Gmr*L, color = 'b')
     plt.xlabel('g')
     plt.ylabel('d3e/dg')
-
-
-    if filename is not None:
-        import pandas as pd
-        df = pd.DataFrame(
-                {'g': gs, 'E_quad': energy, 'd3E_quad': d3energy})
-        df.to_csv(filename)
-
-
-def plot_energy_derivs(A, B, C, L, steps=11):
-    gmax = 1
-    N = L//2
-    eta = np.sin(np.linspace(1, 2*L-1, L)*np.pi/(4*L))
-    epsilon = eta**2
-    # epsilon = -2*np.cos(np.linspace(1, 2*L-1, L)*np.pi/(4*L))
-    energy = np.array([0. for i in range(steps)])
-    denergy = np.array([0. for i in range(steps)])
-    # G = np.linspace(-gmax/L, gmax/L, steps)
-    G = np.linspace(0.00001, gmax/L, steps)
-    for i in range(steps):
-        energy[i], denergy[i]= compute_iom_energy_quad(
-            L, N, G[i], A, B, C, epsilon)
-    denergyalt = np.gradient(energy, G)
-    d2energy = np.gradient(denergy, G)
-    d3energy = np.gradient(d2energy, G)
-
-    plt.subplot(4, 1, 1)
-    plt.plot(G*L, energy/L, label = "a = {0}, b = {1}, c={2}, L={3}".format(
-        A, B, C, L))
-    plt.subplot(4, 1, 2)
-    plt.plot(G*L, denergy/L)
-    plt.plot(G*L, denergyalt/L)
-
-    plt.subplot(4, 1, 3)
-    plt.plot(G*L, d2energy/L)
-
-    plt.subplot(4, 1, 4)
-    plt.plot(G*L, d3energy/L)
-    Gc, Gmr = find_Gc(A, B, C, L, N, np.sum(epsilon))
-    plt.axvline(Gc*L)
-    plt.axvline(Gmr*L)
-
+    return Gs, energy1, d3energy
 
 if __name__ == '__main__':
+    plt.figure(figsize=(15,8))
     L = int(input('Number of sites: '))
     dens = float(input('Density: '))
-    steps = int(input('Max number of steps to increment g: '))
+    gs = float(input('Step size: '))
     samples = int(input('Number of samples for derivative: '))
-    use_fixed = input('Use fixed delta relations? ')
-    if use_fixed == 'Y':
-        use_fixed = True
-    else:
-        use_fixed = False
     filename = None
+
+    G, E, d3E = plot_hyp_energy(L=L, dens=dens, steps=samples,
+                                g_step = gs)
     sav = input('Save file? Y/N ')
     if sav == 'Y':
         save = True
         filename = input('Savefile: ')
-    plot_hyp_energy(L=L, dens=dens, steps=samples,
-                    final_steps=steps,
-                    filename=filename,
-                    use_fixed=use_fixed)
+        import pandas as pd
+        df = pd.DataFrame({'G': G, 'Energy': E, 'd3e/dg3': d3E})
+        df.to_csv(filename)
     plt.show()

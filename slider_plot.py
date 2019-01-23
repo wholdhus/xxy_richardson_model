@@ -5,6 +5,7 @@ import matplotlib.animation as animation
 from solve_rg_model import compute_iom_energy_quad, compute_iom_energy
 from exact_diag import compute_n_exact
 
+
 L = int(input('System length: '))
 dens = float(input('Density: '))
 N = int(dens*L)
@@ -28,11 +29,11 @@ eta = np.sin(k/2)*np.sqrt(t1 + 4*t2*(np.cos(k/2))**2)
 epsilon = eta**2
 # G = G_c
 G = 0
-E, n, delta = compute_iom_energy(L, N, G, 'hyperbolic', epsilon,
-        return_delta = True)
-
-# nk, = plt.plot(k, delta, label='not exact', color = 'black')
+E, n, delta, A = compute_iom_energy(L, N, G, 'hyperbolic', epsilon,
+                                    return_delta = True, return_n=True,
+                                    taylor_expand=False)
 nk, = plt.plot(k, n, label='not exact', color = 'black')
+
 if L < 13:
     Ee, ne = compute_n_exact(L, N, G, epsilon)
     nke, = plt.plot(k, ne, label='exact', ls='--', color = 'c')
@@ -41,24 +42,31 @@ plt.legend()
 
 slideraxis = plt.axes([0.2, 0.05, 0.65, 0.03])
 
-if N > L//2:
-    sG = Slider(slideraxis, 'G', 1.5*G_c, -1.5*G_c, valinit=G)
-elif N < L//2:
-    sG = Slider(slideraxis, 'G', -1.5*G_c, 1.5*G_c, valinit=G)
+G_cross = -1./(N-L/2-1)
+print('Weird crossover G is {}'.format(G_cross))
+if G_cross <= 0:
+    sG = Slider(slideraxis, 'G', 2*G_cross, 0, valinit=G, color = 'black')
 else:
-    print('Woops no handling for half density yet')
+    sG = Slider(slideraxis, 'G', 0, 2*G_cross, valinit=G, color = 'black')
+plt.axvline(G_cross, color = 'm')
+plt.axvline(G_c, color = 'c')
+
+# if N > L//2:
+    # sG = Slider(slideraxis, 'G', 1.5*G_c, -1.5*G_c, valinit=G)
+# elif N < L//2:
+    # sG = Slider(slideraxis, 'G', -1.5*G_c, 1.5*G_c, valinit=G)
+# else:
+    # print('Woops no handling for half density yet')
 
 
 def update(val):
     G = sG.val
-    E, n, delta = compute_iom_energy(L, N, G, 'hyperbolic', epsilon,
-            return_delta=True)
+    E, n, delta, A = compute_iom_energy(L, N, G, 'hyperbolic', epsilon,
+                                        return_delta=True)
     # nk.set_ydata(delta)
     nk.set_ydata(n)
     if L < 13:
         Ee, ne = compute_n_exact(L, N, G, epsilon)
-        if Ee-E > 10**-10:
-            print('Energy diff {} at G='.format(Ee-E, G))
         nke.set_ydata(ne)
     fig.canvas.draw_idle()
 

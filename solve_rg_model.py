@@ -1,6 +1,6 @@
 import numpy as np
 from scipy.linalg import solve, svdvals
-from scipy.optimize import root
+from scipy.optimize import root, nnls
 import scipy.optimize as o
 from numba import njit
 
@@ -38,48 +38,64 @@ def delta_rels_fixed(Delta, L, N, thingies, g, Gamma, epsilon):
     return rels
 
 
-def der_delta(Delta, L, N, Z, g, Gamma, throw=False):
+def der_delta(Delta, L, N, Z, g, Gamma, throw=False, scale=1):
     """Compute the derivatives of Delta (Eqs 5 and 6).
     If throw is true, will return an error if the linear equations
     solved to find derivatives is poorly conditioned."""
-    A = np.diag(Delta + 1 - g/2*np.sum(Z, axis=1)) + g*Z/2
-    b = (g*N*(L-N)*Gamma*np.ones(L) + np.sum(Z, axis=1)*Delta/2
+    A = scale*(np.diag(Delta + 1 - g/2*np.sum(Z, axis=1)) + g*Z/2)
+    b = scale*(g*N*(L-N)*Gamma*np.ones(L) + np.sum(Z, axis=1)*Delta/2
          - np.dot(Z, Delta)/2)
 
-    # Solve the linear system with the modification specified in the
-    # notes.
-    x = np.zeros(L, np.float64)
+    # c = b - 0.5*L*np.matmul(A,Delta)/g
+    # y = np.zeros(L, np.float64)
     for i in range(L):
         A[i] = A[i] - A[i, -1]
     A = A[:-1, :-1]
+    # c = c[:-1]
     b = b[:-1]
+
+    # Solving with inequality constraint x_k >= L lambda_k/2g
+    # Switching to y_k = x_k - L*Delta_k/2g to make constraint >=0
+    # yp, res = nnls(A, c, maxiter=1000) # solving Ay-(b-Ac)=0 for y>=0
+    # print('Residual from least squares: {}'.format(res))
+    # x = np.zeros(L, np.float64)
+    # x[:-1] = yp + 0.5*L*Delta[:-1]/g
+    # x[-1] = -np.sum(x[:-1])
 
     # Compute the condition number of A. It quantifies how much
     # precision we loose when we solve the linear system Ax = b.
-    # w = svdvals(A)
-    # cn = w[-1]/w[0]
+    w = svdvals(A)
+    cn = w[-1]/w[0]
+    # det = np.prod(w)
+    # print('Det is {}'.format(det))
     cn = np.linalg.cond(A)
 
-    # print(f'Condition number: {cn:4.2e}')
-    # print('The derivatives of delta are accurate'
-          # + f' up to the {16 + np.log10(cn):3.0f}th digit.')
-    if cn > 10**10 and throw:
-        raise Exception('Condition number is {}!'.format(cn))
-    else:
-        x[:-1] = solve(A, b)
-        x[-1] = -np.sum(x[:-1])
+    print(f'Condition number: {cn:4.2e}')
+    print('The derivatives of delta are accurate'
+          + f' up to the {16 + np.log10(cn):3.0f}th digit.')
+    x = np.zeros(L, np.float64)
+    x[:-1] = solve(A, b)
+    x[-1] = -np.sum(x[:-1])
+    # print('This is at g = {}'.format(g))
+    # prod = np.matmul(A, x[:-1]) - b
+    # maxdif = np.max(np.abs(prod))
+    # mindif = np.min(np.abs(prod))
+    # print('Relative max error of Ax-b = 0 is {}'.format(mindif/maxdif))
+    # print(x)
 
-        return x
+    return x/scale, A
 
 
-def compute_particle_number(Delta, L, N, Z, g, Gamma):
+def compute_particle_number(Delta, L, N, Z, g, Gamma, scale=1):
     """Compute the occupation numbers (Eq 11)."""
-    n = -Delta/2 + g/2*der_delta(Delta, L, N, Z, g, Gamma)
-    return n
+    ders, A = der_delta(Delta, L, N, Z, g, Gamma, scale=scale)
+    n = -0.5*Delta +  0.5*g*ders
+    return n, A
 
 
 def compute_hyperbolic_energy(L, N, G, epsilon,
-        g_step, holdover=0, taylor_expand=False):
+        g_step, holdover=0, taylor_expand=False,
+        return_matrix=False):
     """Compute the exact energy using the integrals of motion.
 
     Args:
@@ -146,13 +162,15 @@ def compute_hyperbolic_energy(L, N, G, epsilon,
     # Now forming eigenvalues of IM and observables
     ri = -1/2 - delta/2 + g/4*np.sum(Z, axis=1)
     E = 1/lambd*np.dot(epsilon, ri) + np.sum(epsilon)*(1/2 - 3/4*G)
-    n = compute_particle_number(delta, L, N, Z, g, Gamma)
-    return E, n, dr, success
+    n, A = compute_particle_number(delta, L, N, Z, g, Gamma)
+    if return_matrix:
+        return E, n, delta, A
+    return E, n, delta, success
 
 
 def compute_iom_energy(L, N, G, model, epsilon,
         steps=100, return_delta=False, return_n=True,
-        taylor_expand=True, use_fixed_rels=False):
+        taylor_expand=False, use_fixed_rels=False, scale=1):
     """Compute the exact energy using the integrals of motion.
 
     Args:
@@ -175,7 +193,7 @@ def compute_iom_energy(L, N, G, model, epsilon,
     Gamma = 0 if model == 'rational' else -1
 
     # Compute Z matrix.
-    Z = np.zeros((L, L))
+    Z = np.zeros((L, L), np.float64)
     for i in range(L):
         for j in range(i):  # j < i.
             if model == 'hyperbolic':
@@ -190,53 +208,33 @@ def compute_iom_energy(L, N, G, model, epsilon,
     eps_min = np.argsort(epsilon)
     delta[eps_min[:N]] = -2
 
+    G_step = np.abs(G)/steps
+    if G == 0:
+        G_path = np.array([0])
+    elif G > 0:
+        G_path = np.append(np.arange(0, G, G_step), G)
+    else:
+        G_path = -np.append(np.arange(0, -G, G_step), -G)
+    # g_step = np.abs(g_final)/steps
+    # g_path = np.linspace(0, np.abs(g_final), steps)
+    # if g_final > 0:
+        # g_path = np.append(np.arange(0, g_final, g_step), g_final)
+    # elif g_final < 0:
+        # g_path = -np.append(np.arange(0, -g_final, g_step), -g_final)
+    # inc = np.all(g_path[1:] >= g_path[:-1])
+    # dec = np.all(g_path[1:] <= g_path[:-1])
+    # finding root while varying g, using prev. solution to start
+
     # Finding value of g (used in numerics) corresponding to G
     if model =='rational':
-        g_final= -2*G
+        G_final= -2*G_path
     else: # hyperbolic
-        np.seterr(all='raise')
-        lambd = 1/(1 + G*(N - L/2 - 1))
-        g_final = -G*lambd
+        lambd = 1/(1 + G_path*(N - L/2 - 1))
+        g_path = -G_path*lambd
 
-    # Points over which we will iterate until we reach g_final.
-    g_step = np.abs(g_final)/steps
-    if g_step > 0.02:
-        print('Warning: steps are getting biggish {}'.format(
-            g_step))
-    # print('Step size is {}'.format(g_step))
-    g_path = np.linspace(0, np.abs(g_final), steps)
-    if g_final > 0:
-        g_path = np.append(np.arange(0, g_final, g_step), g_final)
-    elif g_final < 0:
-        g_path = -np.append(np.arange(0, -g_final, g_step), -g_final)
-    inc = np.all(g_path[1:] >= g_path[:-1])
-    dec = np.all(g_path[1:] <= g_path[:-1])
-    if inc:
-        # print('g_path is increasing')
-        pass
-    elif dec:
-        # print('g_path is decreasing')
-        pass
-    else:
-        print('Something is wrong with g_path')
-        print(g_path)
-    # print(g_path)
-    # finding root while varying g, using prev. solution to start
     for g in g_path:
-        if not np.isnan(g): # skipping steps where lambd broke
-            if use_fixed_rels:
-                thingies = np.zeros((L,L))
-                for i in range(L):
-                    for j in range(i):
-                        thingies[i, j] = 1./(epsilon[i] - epsilon[j])
-                        thingies[j, i] = -thingies[i, j]
-                sol = root(delta_rels_fixed, delta, args=(L, N, thingies,
-                            g, Gamma, epsilon),method='lm')
-            else:
-                sol = root(delta_relations, delta, args=(L, N, Z, g, Gamma),
-                           method='lm')
-        if np.isnan(g):
-            print('Division by 0 problem at g={}'.format(g))
+        sol = root(delta_relations, delta, args=(L, N, Z, g, Gamma),
+                   method='lm')
         delta = sol.x
 
         if taylor_expand and g != g_final:
@@ -250,11 +248,7 @@ def compute_iom_energy(L, N, G, model, epsilon,
                 print('Problem with derivatives: {}'.format(e))
 
     # checking accuracy of solutions
-    if use_fixed_rels:
-        dr = delta_rels_fixed(delta, L, N, thingies,
-                g, Gamma, epsilon)
-    else:
-        dr = delta_relations(delta, L, N, Z, g, Gamma)
+    dr = delta_relations(delta, L, N, Z, g, Gamma)
     if np.max(dr)> 10**-12:
         print('WARNING: At G= {} error is {}'.format(
                 G, np.max(dr)))
@@ -273,19 +267,20 @@ def compute_iom_energy(L, N, G, model, epsilon,
         ri = -1/2 - delta/2 + g/4*np.sum(Z, axis=1)
         E = np.dot(epsilon, ri) + np.sum(epsilon)/2+G*((N-L/2)**2-N- L/4)
         if return_n:
-            n = compute_particle_number(delta, L, N, Z, g, Gamma)
-
+            n, A = compute_particle_number(delta, L, N, Z, g, Gamma,
+                                        scale=scale)
     elif model == 'hyperbolic':
         # Eigenvalues of the IM.
         ri = -1/2 - delta/2 + g/4*np.sum(Z, axis=1)
         E = 1/lambd*np.dot(epsilon, ri) + np.sum(epsilon)*(1/2 - 3/4*G)
         if return_n:
-            n = compute_particle_number(delta, L, N, Z, g, Gamma)
+            n, A = compute_particle_number(delta, L, N, Z, g, Gamma,
+                                        scale=scale)
 
     # print('Max delta is {}'.format(np.max(np.abs(delta))))
     # print('This is at index {}'.format(np.argmax(np.abs(delta))))
     if return_delta and return_n:
-        return E, n, delta
+        return E, n, delta, A
     elif return_n:
         return E, n
     else:
