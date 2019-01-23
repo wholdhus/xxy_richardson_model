@@ -23,21 +23,6 @@ def delta_relations(Delta, L, N, Z, g, Gamma):
     return rels
 
 
-def delta_rels_fixed(Delta, L, N, thingies, g, Gamma, epsilon):
-    """Express the relations of the Delta parameters (Eqs 3 and 4)
-    Combined the info from 4 into 3.
-    """
-    rels = np.zeros(L, np.float64)
-    rels[:L] = (-Delta**2 + g**2*N*(L-N)*Gamma -2*g*N
-            - (2+g*L)*Delta)
-    rels[:L] = rels[:L] + 2*g*epsilon*(
-                np.sum(thingies, axis=1)*Delta
-                - np.dot(thingies, Delta))
-    # rels[L] = np.sum(Delta) + 2*N
-    print(rels)
-    return rels
-
-
 def der_delta(Delta, L, N, Z, g, Gamma, throw=False, scale=1):
     """Compute the derivatives of Delta (Eqs 5 and 6).
     If throw is true, will return an error if the linear equations
@@ -53,14 +38,6 @@ def der_delta(Delta, L, N, Z, g, Gamma, throw=False, scale=1):
     A = A[:-1, :-1]
     # c = c[:-1]
     b = b[:-1]
-
-    # Solving with inequality constraint x_k >= L lambda_k/2g
-    # Switching to y_k = x_k - L*Delta_k/2g to make constraint >=0
-    # yp, res = nnls(A, c, maxiter=1000) # solving Ay-(b-Ac)=0 for y>=0
-    # print('Residual from least squares: {}'.format(res))
-    # x = np.zeros(L, np.float64)
-    # x[:-1] = yp + 0.5*L*Delta[:-1]/g
-    # x[-1] = -np.sum(x[:-1])
 
     # Compute the condition number of A. It quantifies how much
     # precision we loose when we solve the linear system Ax = b.
@@ -86,9 +63,9 @@ def der_delta(Delta, L, N, Z, g, Gamma, throw=False, scale=1):
     return x/scale, A
 
 
-def compute_particle_number(Delta, L, N, Z, g, Gamma, scale=1):
+def compute_particle_number(Delta, L, N, Z, g, Gamma):
     """Compute the occupation numbers (Eq 11)."""
-    ders, A = der_delta(Delta, L, N, Z, g, Gamma, scale=scale)
+    ders, A = der_delta(Delta, L, N, Z, g, Gamma)
     n = -0.5*Delta +  0.5*g*ders
     return n, A
 
@@ -170,7 +147,7 @@ def compute_hyperbolic_energy(L, N, G, epsilon,
 
 def compute_iom_energy(L, N, G, model, epsilon,
         steps=100, return_delta=False, return_n=True,
-        taylor_expand=False, use_fixed_rels=False, scale=1):
+        taylor_expand=False):
     """Compute the exact energy using the integrals of motion.
 
     Args:
@@ -227,7 +204,7 @@ def compute_iom_energy(L, N, G, model, epsilon,
 
     # Finding value of g (used in numerics) corresponding to G
     if model =='rational':
-        G_final= -2*G_path
+        g_path = -2*G_path
     else: # hyperbolic
         lambd = 1/(1 + G_path*(N - L/2 - 1))
         g_path = -G_path*lambd
@@ -252,14 +229,6 @@ def compute_iom_energy(L, N, G, model, epsilon,
     if np.max(dr)> 10**-12:
         print('WARNING: At G= {} error is {}'.format(
                 G, np.max(dr)))
-        # relerror = dr[:(L-1)]/delta
-        # print('Average relative error is {}'.format(np.max(relerror)))
-        # print('g_path was:')
-        # print(g_path)
-        # print('Differences are:')
-        # print(dr)
-        # print('Max delta is currently:')
-        # print(np.max(np.abs(delta)))
 
     # Now forming eigenvalues of IM and observables
     if model == 'rational':
@@ -267,18 +236,14 @@ def compute_iom_energy(L, N, G, model, epsilon,
         ri = -1/2 - delta/2 + g/4*np.sum(Z, axis=1)
         E = np.dot(epsilon, ri) + np.sum(epsilon)/2+G*((N-L/2)**2-N- L/4)
         if return_n:
-            n, A = compute_particle_number(delta, L, N, Z, g, Gamma,
-                                        scale=scale)
+            n, A = compute_particle_number(delta, L, N, Z, g, Gamma)
     elif model == 'hyperbolic':
         # Eigenvalues of the IM.
         ri = -1/2 - delta/2 + g/4*np.sum(Z, axis=1)
-        E = 1/lambd*np.dot(epsilon, ri) + np.sum(epsilon)*(1/2 - 3/4*G)
+        E = 1/lambd[-1]*np.dot(epsilon, ri) + np.sum(epsilon)*(1/2 - 3/4*G)
         if return_n:
-            n, A = compute_particle_number(delta, L, N, Z, g, Gamma,
-                                        scale=scale)
+            n, A = compute_particle_number(delta, L, N, Z, g, Gamma)
 
-    # print('Max delta is {}'.format(np.max(np.abs(delta))))
-    # print('This is at index {}'.format(np.argmax(np.abs(delta))))
     if return_delta and return_n:
         return E, n, delta, A
     elif return_n:
@@ -286,86 +251,7 @@ def compute_iom_energy(L, N, G, model, epsilon,
     else:
         return E
 
-
-def compute_iom_energy_quad(L, N, G, A, B, C, epsilon, G_step=0.0002):
-    """Compute the exact energy using the integrals of motion for
-	quadratic coupling case.
-
-    Args:
-        L (int): system's size.
-        N (int): particle number.
-	    G (float): overall coupling strength
-        A (float): strength of constant term in Z
-        B (float): strength of linear term in Z
-        C (float): strength of quadratic term in Z
-        epsilon (1darray of floats): epsilon values.
-
-    Returns:
-        E (float): ground state energy.
-        derE (float): dE/dg
-
-    """
-    # Determine the value of the constant Gamma.
-    Gamma = A*C-B**2
-    # if Gamma > 0:
-        # print('Warning: trigonometric case, idk what happens now')
-    # Form some constants that show up in a bit.
-    seps = np.sum(epsilon)
-    seps2 = np.sum(epsilon**2)
-    M = N - L/2
-
-    # Compute Z matrix.
-    Z = np.zeros((L, L))
-    for i in range(L):
-        for j in range(i):  # j < i.
-            numer = A + B*(epsilon[i] + epsilon[j]) + C*epsilon[i]*epsilon[j]
-            Z[i, j] = numer/(epsilon[i] - epsilon[j])
-            Z[j, i] = -Z[i, j]
-    # Initial values for Delta with g small. The -2 values (initially
-    # occupied states) go where the epsilons are smallest.
-    delta = np.zeros(L, np.float64)
-    eps_min = np.argsort(epsilon)
-    delta[eps_min[:N]] = -2
-
-    # Points over which we will iterate until we reach G.
-    G_path = np.append(np.arange(0, G, G_step), G)
-
-    # Parametrize g to equivalent integrable Hamiltonian \sum_i \e_i R_i
-    g_scale = -2/(1 + G_path*(2*B*(M - 1) - C*seps))
-    g_path = G_path*g_scale
-
-    for g in g_path:
-        sol = root(delta_relations, delta, args=(L, N, Z, g, Gamma),
-                   method='lm')
-        delta = sol.x
-    g = g_path[-1]
-    Lambda = 1 + B*g*(M - 1)
-
-    # Eigenvalues of the IOM.
-    ri = -1/2 - delta/2 + g/4*np.sum(Z, axis=1)
-    # Forming energy from scaled IOM
-    const = g*(3*A*L+6*B*seps+C*(seps2-seps**2))/8-A*g*M*(M-1)/2+Lambda*seps/2
-    coeff = 1/(Lambda - g*C*seps/2)
-    E = coeff*(np.dot(epsilon, ri) + const)
-
-    # Forming dEdG
-    dDelta = der_delta(delta, L, N, Z, g, Gamma)
-    dri = -1/2*dDelta + 1/4*np.sum(Z, axis=1)
-    dg = -2./(1+G*(2*B*(M-1)-C*seps))**2
-    dcoeff = -A*M*(M-1)/2+(3*A*L+6*B*seps+C*(seps2-seps**2))/8+B*(M-1)*seps/2
-
-    dEdG = dg*(C*seps*coeff**2/2 * (np.dot(epsilon, ri) + const)
-            + coeff*(np.dot(epsilon, dri) + dcoeff))
-
-    n = compute_particle_number(delta, L, N, Z, g, Gamma)
-    return E, dEdG, n
-
-if __name__ == "__main__":
-    L = 50
-    eta = np.sin(np.linspace(1, 2*L-1, L)*np.pi/(4*L))
-    epsilon = eta**2
-    N = L//2
-    E, dE, n = compute_iom_energy_quad(L, N, 0.01, 1, 2, 1, epsilon)
-    print('Energy is {}'.format(E))
-    print('dEdG is {}'.format(dE))
-
+def rgk_spectrum(L, t1, t2):
+    k = np.linspace(0, 1, L)*np.pi
+    epsilon = -0.5 * t1 * (np.cos(k) - 1) - 0.5 * t2 * (np.cos(2*k) -1)
+    return k, epsilon

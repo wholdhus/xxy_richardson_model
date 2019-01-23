@@ -2,7 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.widgets import Slider
 import matplotlib.animation as animation
-from solve_rg_model import compute_iom_energy_quad, compute_iom_energy
+from solve_rg_model import compute_iom_energy
 from exact_diag import compute_n_exact
 
 

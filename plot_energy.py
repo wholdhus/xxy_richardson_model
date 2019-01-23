@@ -1,25 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from solve_rg_model import compute_iom_energy_quad, compute_iom_energy
-from solve_rg_model import compute_hyperbolic_energy
+from solve_rg_model import compute_iom_energy, compute_hyperbolic_energy
 from exact_diag import compute_n_exact, compute_E
-
-
-def Gofg(g, L, N, A, B, C, seps):
-    M = N - L/2
-    lamb = 1+B*g*(M-1)
-    G = -g/(2*lamb - g*C*seps)
-    return G
-
-
-def find_Gc(A, B, C, L, N, seps):
-    N = L//4
-    gamma = np.sqrt(B**2-A*C)
-    gc = -1./(gamma*(L/2-1)) # crit point from my work
-    gmr = -1./(gamma*(L/2-N-1))
-    Gc = Gofg(gc, L, N, A, B, C, seps)
-    Gmr = Gofg(gmr, L, N, A, B, C, seps)
-    return Gc, Gmr
 
 
 def plot_hyp_energy(epsilon=None, L=10, dens = 3/4,
@@ -49,34 +31,24 @@ def plot_hyp_energy(epsilon=None, L=10, dens = 3/4,
     print('New weird point is g= {}'.format(2.0*L/(N-1)))
     Gnew = 2.0/(N-1)
     if Gc > 0:
-        Gs = np.linspace(-1.5*Gc, 1.5*Gc, steps)
+        Gs = np.linspace(0.2*Gc, 1.2*Gc, steps)
     else:
-        Gs = np.linspace(5*Gc, 0.5*Gc, steps)
-    # Gs = np.linspace(5*Gc, 0.75*Gc, steps)
+        Gs = np.linspace(1.2*Gc, -0.2*Gc, steps)
     gs = L*Gs
     energy1 = np.zeros(steps)
     energy2 = np.zeros(steps)
     energy3 = np.zeros(steps)
     for i, G in enumerate(Gs):
         print('{}th step, G = {}'.format(i, G))
-        # if G !=0:
-            # gsteps = int(np.abs(G)/g_step)
-        # else:
-            # gsteps = 1
-        # # print(gsteps)
-        # energy1[i] = compute_iom_energy(L, N,
-                # G, 'hyperbolic', epsilon, steps = gsteps,
-                # return_n = False,
-                # taylor_expand = False)
         energy1[i], n, d1, success = compute_hyperbolic_energy(
                 L, N, G, epsilon, g_step=g_step,
                 taylor_expand=False, holdover=0)
-        # energy2[i], n, d2, success = compute_hyperbolic_energy(
-                # L, N, G, epsilon, g_step=g_step,
-                # taylor_expand=False, holdover=0.1)
-        # energy3[i], n, d3, success = compute_hyperbolic_energy(
-                # L, N, G, epsilon, g_step=g_step,
-                # taylor_expand=False, holdover=0.25)
+        energy2[i], n, d2, success = compute_hyperbolic_energy(
+                L, N, G, epsilon, g_step=g_step,
+                taylor_expand=False, holdover=0.1)
+        energy3[i], n, d3, success = compute_hyperbolic_energy(
+                L, N, G, epsilon, g_step=g_step,
+                taylor_expand=False, holdover=0.25)
 
     denergy = np.gradient(energy1, gs)
     d2energy = np.gradient(denergy, gs)
@@ -90,12 +62,10 @@ def plot_hyp_energy(epsilon=None, L=10, dens = 3/4,
         d2ee = np.gradient(dee, gs)
         d3ee = np.gradient(d2ee, gs)
 
-    plt.subplot(3,1,1)
-    plt.plot(gs, energy1/L)
+    plt.subplot(2,1,1)
     plt.scatter(gs, energy1/L, s=5)
-    # plt.axvline(-L*Gnew)
-    # plt.plot(gs, energy2/L, label='Holdover .25', linestyle = ':')
-    # plt.plot(gs, energy3/L, label='Holdover .5', linestyle = ':')
+    plt.scatter(gs, energy2/L, label='Holdover .25')
+    plt.scatter(gs, energy3/L, label='Holdover .5')
     if L <13:
         plt.plot(gs, eenergy/L, linestyle = ':',
                 color = 'c',
@@ -105,9 +75,9 @@ def plot_hyp_energy(epsilon=None, L=10, dens = 3/4,
     plt.xlabel('g')
     plt.title('L = {}, N = {}'.format(L, N))
 
-    plt.subplot(3,1,2)
-    plt.plot(gs[5:-5], d3energy[5:-5]/L)
-    plt.scatter(gs[5:-5], d3energy[5:-5]/L)
+    plt.subplot(2,1,2)
+    plt.plot(gs, d3energy/L)
+    plt.scatter(gs, d3energy/L)
     # plt.axvline(-L*Gnew)
     # if L < 13:
         # plt.plot(gs[:l], d3ee/L,
