@@ -47,9 +47,11 @@ def der_delta(Delta, L, N, Z, g, Gamma, throw=False, scale=1):
     # print('Det is {}'.format(det))
     cn = np.linalg.cond(A)
 
-    print(f'Condition number: {cn:4.2e}')
-    print('The derivatives of delta are accurate'
-          + f' up to the {16 + np.log10(cn):3.0f}th digit.')
+    # This is no longer accurate and I don't get it
+    print('Condition number: {}'.format(np.round(cn,2)))
+    print('We are losing around {} digits.'.format(np.round(np.log10(cn),2)))
+    # print('The derivatives of delta are accurate'
+          # + f' up to the {16 + np.log10(cn):3.0f}th digit.')
     x = np.zeros(L, np.float64)
     x[:-1] = solve(A, b)
     x[-1] = -np.sum(x[:-1])
