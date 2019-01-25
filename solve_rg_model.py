@@ -1,11 +1,10 @@
 import numpy as np
 from scipy.linalg import solve, svdvals
-from scipy.optimize import root, nnls
-import scipy.optimize as o
-from numba import njit
+from scipy.optimize import root
+# from numba import njit
 
 
-@njit()
+# @njit()
 def delta_relations(Delta, L, N, Z, g, Gamma):
     """Express the relations of the Delta parameters (Eqs 3 and 4).
 
@@ -120,6 +119,7 @@ def compute_hyperbolic_energy(L, N, G, epsilon,
         if not np.isnan(g): # skipping steps where lambd broke
             sol = root(delta_relations, delta, args=(L, N, Z, g, Gamma),
                        method='lm')
+            print('Did thing!')
         if np.isnan(g):
             print('Division by 0 problem at g={}'.format(g))
         last = delta
