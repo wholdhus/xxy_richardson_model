@@ -119,7 +119,6 @@ def compute_hyperbolic_energy(L, N, G, epsilon,
         if not np.isnan(g): # skipping steps where lambd broke
             sol = root(delta_relations, delta, args=(L, N, Z, g, Gamma),
                        method='lm')
-            print('Did thing!')
         if np.isnan(g):
             print('Division by 0 problem at g={}'.format(g))
         last = delta

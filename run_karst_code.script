@@ -1,0 +1,9 @@
+#!/bin/bash
+#PBS -l nodes=1:ppn=4,vmem=5gb,walltime=00:30:00
+#PBS -q debug
+#PBS -k o
+#PBS -M wholdhus@gmail.com
+#PBS -m abe
+#PBS -N TryBig
+#PBS -j oe
+python karst_code.py
