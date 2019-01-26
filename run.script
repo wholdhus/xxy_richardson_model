@@ -4,6 +4,6 @@
 #PBS -k o
 #PBS -M wholdhus@gmail.com
 #PBS -m abe
-#PBS -N TryBig
+#PBS -N $3
 #PBS -j oe
-python karst_code.py
+python karst_code.py $1 $2

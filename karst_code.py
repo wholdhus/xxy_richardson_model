@@ -1,11 +1,19 @@
 from solve_rg_model import compute_hyperbolic_energy, rgk_spectrum
 import numpy as np
 import pandas as pd
+import sys
 
-L = 20
-N = 13
-g_step = 0.01/L
+if len(sys.argv) == 3:
+    L = int(sys.argv[1])
+    N = int(sys.argv[2])
+else:
+    L = 20
+    N = 13
+g_step = 0.05/L
 steps = 50
+
+print('Running with params L, N, g_step, steps = {}, {}, {}, {}'.format(
+    L, N, g_step, steps))
 
 Gc = 1./(L-2*N+1)
 
@@ -32,9 +40,10 @@ for i, G in enumerate(Gs):
     energies[i] = N
     cdns[i] = np.linalg.cond(A)
 
-deltas.to_csv('deltas.csv')
-ns.to_csv('ns.csv')
+file_start = 'results/{}_{}_'.format(L, N)
+deltas.to_csv(file_start + 'deltas.csv')
+ns.to_csv(file_start + 'nsk.csv')
 other['Energy'] = energies
 other['Condition numbers'] = cdns
-other.to_csv('everything_else.csv')
+other.to_csv(file_start + 'everything_else.csv')
 print('Final energy is {}'.format(E))
