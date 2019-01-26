@@ -1,10 +1,10 @@
 import numpy as np
 from scipy.linalg import solve, svdvals
 from scipy.optimize import root
-# from numba import njit
+from numba import njit
 
 
-# @njit()
+@njit()
 def delta_relations(Delta, L, N, Z, g, Gamma):
     """Express the relations of the Delta parameters (Eqs 3 and 4).
 
