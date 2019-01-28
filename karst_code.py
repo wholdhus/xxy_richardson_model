@@ -31,16 +31,16 @@ energies = np.zeros(steps)
 cdns = np.zeros(steps)
 
 for i, G in enumerate(Gs):
-    if G < 0.3*Gc:
+    if np.abs(G) < np.abs(0.2*Gc):
+        g_step = 1./L
+    elif np.abs(G) < np.abs(0.9*Gc):
         g_step = 0.1/L
-    elif G < 0.9*Gc:
-        g_step = 0.01/L
     else:
-        g_step = 0.005/L
+        g_step = 0.001/L
     print('')
     print('G = {}'.format(G))
     E, n, delta, A = compute_hyperbolic_energy(L, N, G, epsilon, g_step,
-                                               return_matrix=True)
+                                               return_matrix=True, holdover=0.2)
     deltas['G={}'.format(G)] = delta
     ns['G={}'.format(G)] = n
     energies[i] = E
