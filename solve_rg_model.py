@@ -1,10 +1,10 @@
 import numpy as np
 from scipy.linalg import solve, svdvals
 from scipy.optimize import root
-from numba import njit
+# from numba import njit
 
 
-@njit()
+# @njit()
 def delta_relations(Delta, L, N, Z, g, Gamma):
     """Express the relations of the Delta parameters (Eqs 3 and 4).
 
@@ -47,8 +47,7 @@ def der_delta(Delta, L, N, Z, g, Gamma, throw=False, scale=1):
     cn = np.linalg.cond(A)
 
     # This is no longer accurate and I don't get it
-    print('Condition number: {}'.format(np.round(cn,2)))
-    print('We are losing around {} digits.'.format(np.round(np.log10(cn),2)))
+    print('Condition number: {}. We lose {} digits'.format(np.round(cn,2), np.round(np.log10(cn),2)))
     # print('The derivatives of delta are accurate'
           # + f' up to the {16 + np.log10(cn):3.0f}th digit.')
     x = np.zeros(L, np.float64)
