@@ -251,7 +251,10 @@ def compute_iom_energy(L, N, G, model, epsilon,
     else:
         return E
 
-def rgk_spectrum(L, t1, t2):
-    k = np.linspace(0, 1, L)*np.pi
+def rgk_spectrum(L, t1, t2, per=None):
+    if per == 'anti':
+        k = np.linspace(-1, 0, L)*np.pi
+    else:
+        k = np.linspace(0, 1, L)*np.pi
     epsilon = -0.5 * t1 * (np.cos(k) - 1) - 0.5 * t2 * (np.cos(2*k) -1)
     return k, epsilon
