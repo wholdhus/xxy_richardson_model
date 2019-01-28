@@ -21,7 +21,7 @@ Gs = np.linspace(0, 1.5, steps)*Gc
 
 print('crit G is {}'.format(Gc))
 
-k, repsilon = rgk_spectrum(L, 1, 0)
+k, epsilon = rgk_spectrum(L, 1, 0)
 # epsilon = k**2
 
 deltas = pd.DataFrame({'k': k, 'epsilon': epsilon})
@@ -32,11 +32,11 @@ cdns = np.zeros(steps)
 
 for i, G in enumerate(Gs):
     if G < 0.3*Gc:
-	g_step = .1/L
+        g_step = 0.1/L
     elif G < 0.9*Gc:
-        g_step = .01/L
+        g_step = 0.01/L
     else:
-        g_step = .005/L
+        g_step = 0.005/L
     print('')
     print('G = {}'.format(G))
     E, n, delta, A = compute_hyperbolic_energy(L, N, G, epsilon, g_step,
