@@ -2,7 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.widgets import Slider
 import matplotlib.animation as animation
-from solve_rg_model import compute_iom_energy
+from solve_rg_model import compute_iom_energy, compute_hyperbolic_energy
 from exact_diag import compute_n_exact
 
 
@@ -29,9 +29,12 @@ eta = np.sin(k/2)*np.sqrt(t1 + 4*t2*(np.cos(k/2))**2)
 epsilon = eta**2
 # G = G_c
 G = 0
-E, n, delta, A = compute_iom_energy(L, N, G, 'hyperbolic', epsilon,
-                                    return_delta = True, return_n=True,
-                                    taylor_expand=False)
+# E, n, delta, A = compute_iom_energy(L, N, G, 'hyperbolic', epsilon,
+                                    # return_delta = True, return_n=True,
+                                    # taylor_expand=False)
+E, n, delta, success = compute_hyperbolic_energy(L, N, G, epsilon,
+                                                 g_step=.005, holdover=0,
+                                                 try_g_inv=True)
 nk, = plt.plot(k, n, label='not exact', color = 'black')
 
 if L < 13:
@@ -61,8 +64,9 @@ plt.axvline(G_c, color = 'c')
 
 def update(val):
     G = sG.val
-    E, n, delta, A = compute_iom_energy(L, N, G, 'hyperbolic', epsilon,
-                                        return_delta=True)
+    E, n, delta, succ = compute_hyperbolic_energy(L, N, G, epsilon,
+                                                  g_step=.005, holdover=0,
+                                                  try_g_inv=True)
     # nk.set_ydata(delta)
     nk.set_ydata(n)
     if L < 13:

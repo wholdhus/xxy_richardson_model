@@ -12,13 +12,23 @@ def delta_relations(Delta, L, N, Z, g, Gamma):
     The relations have the form of a vector whose entries are zeros.
     """
     rels = np.zeros(L+1, np.float64)
-
     # Eq 3.
     rels[:L] = (-Delta**2 + g**2*N*(L-N)*Gamma - 2*Delta
                 + g*np.sum(Z, axis=1)*Delta - g*np.dot(Z, Delta))
-
     # Eq 4.
     rels[L] = np.sum(Delta) + 2*N
+
+    return rels
+
+
+def lambda_relations(Lambda, L, N, Z, ginv, Gamma):
+    rels = np.zeros(L+1, np.float64)
+    ginv2 = ginv**2
+    # Eq 3.
+    rels[:L] = (-Lambda**2 + N*(L-N)*Gamma - 2*ginv*Lambda
+                + np.sum(Z, axis=1)*Lambda - np.dot(Z, Lambda))
+    # Eq 4.
+    rels[L] = np.sum(Lambda) + 2*N*ginv
 
     return rels
 
@@ -72,9 +82,49 @@ def compute_particle_number(Delta, L, N, Z, g, Gamma):
     return n, A
 
 
+def use_g_inv(L, N, G, Z, delta, g_step):
+    start = 0.9
+    finish = 1.1
+    Gamma = -1
+    GP = 1./(1-N+L/2)
+    lambd1 = 1/(1 + start*GP*(N - L/2 - 1))
+    gf1 = -start*GP*lambd1
+    part1 = np.append(np.arange(0, gf1, g_step, dtype=np.float64),
+            gf1)
+    # gnext = gf1 + g_step
+    for g in part1:
+        sol = root(delta_relations, delta, args=(L, N, Z, g, Gamma),
+                method='lm')
+        delta = sol.x # not doing any holdover shit
+    if G < finish*GP:
+        part2G = -np.append(np.arange(-start*GP, -finish*GP, g_step),
+                -finish*GP)
+    else:
+        part2G = -np.append(np.arange(-start*GP, -G, g_step),
+                -G)
+    # print('G for part 2: {}'.format(part2G))
+    part2 = -(1+part2G*(N-L/2-1))/part2G # array of g^-1
+    print('g^-1 for part 2: {}'.format(part2))
+    Lambda = delta/part1[-1]
+    for g in part2:
+        sol = root(lambda_relations, Lambda, args=(L, N, Z,
+                   g, Gamma), method='lm')
+        Lambda = sol.x
+    delta = Lambda/part2[-1]
+    if G < finish*GP: # still need to do the last bit
+        part3G = -np.append(np.arange(-finish*GP, -G, g_step), -G)
+        lambds3 = 1/(1+part3G*(N-L/2-1))
+        part3 = -part3G*lambds3
+        for g in part3:
+            sol = root(delta_relations, delta, args=(L, N, Z, g,
+                       Gamma), method= 'lm')
+            delta = sol.x
+    return delta
+
+
 def compute_hyperbolic_energy(L, N, G, epsilon,
         g_step, holdover=0, taylor_expand=False,
-        return_matrix=False):
+        return_matrix=False, try_g_inv=True):
     """Compute the exact energy using the integrals of motion.
 
     Args:
@@ -103,33 +153,41 @@ def compute_hyperbolic_energy(L, N, G, epsilon,
     eps_min = np.argsort(epsilon)
     delta[eps_min[:N]] = -2
 
-    # Finding value of g (used in numerics) corresponding to G
-    # np.seterr(all='raise')
+    Gp = 1./(1-N+L/2)
     lambd = 1/(1 + G*(N - L/2 - 1))
     g_final = -G*lambd
-
-    # Points over which we will iterate until we reach g_final.
-    if g_final > 0:
-        g_path = np.append(np.arange(0, g_final, g_step), g_final)
-    elif g_final < 0:
-        g_path = -np.append(np.arange(0, -g_final, g_step), -g_final)
-    else:
-        g_path = np.array([0])
-    # Finding root while varying g, using prev. solution to start
-    for g in g_path:
-        if not np.isnan(g): # skipping steps where lambd broke
+    if G < 0.9*Gp and try_g_inv: # need to do some trickz
+        print('Using inverted g stuff')
+        delta = use_g_inv(L, N, G, Z, delta, g_step)
+    else: # we can just increment G
+        # Points over which we will iterate until we reach g_final.
+        g_path = g_final * np.append(
+                np.arange(0, 1, g_step, dtype=np.float64), 1)
+        # if g_final > 0:
+            # g_path = np.append(np.arange(0, g_final, g_step,
+                # dtype=np.float64), g_final)
+        # elif g_final < 0:
+            # g_path = -np.append(np.arange(0, -g_final, g_step,
+                # dtype=np.float64), -g_final)
+        # else:
+            # g_path = np.array([0], dtype=np.float64)
+        # Finding root while varying g, using prev. solution to start
+        for i, g in enumerate(g_path):
+            # if i != 0 and np.abs(g - g_path[i-1]) > 3:
+                # print('G jumped big, gonna pass, setting high holdover')
+                # holdover = 0.8
+                # pass # just going to skip for now
+            # else:
             sol = root(delta_relations, delta, args=(L, N, Z, g, Gamma),
                        method='lm')
-        if np.isnan(g):
-            print('Division by 0 problem at g={}'.format(g))
-        last = delta
-        delta = (1 - holdover) * sol.x + holdover * last
+            last = delta
+            delta = (1 - holdover) * sol.x + holdover * last
+        if holdover != 0:
+            sol = root(delta_relations, delta, args=(L, N, Z, g_final,
+                       Gamma), method = 'lm')
+            delta = sol.x
+        # checking accuracy of solutions
     g = g_final
-    if holdover != 0:
-        sol = root(delta_relations, delta, args=(L, N, Z, g, Gamma),
-                method = 'lm')
-        delta = sol.x
-    # checking accuracy of solutions
     dr = delta_relations(delta, L, N, Z, g, Gamma)
     if np.max(dr)> 10**-12:
         print('WARNING: At G= {} error is {}'.format(

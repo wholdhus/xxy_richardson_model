@@ -22,10 +22,12 @@ def compute_n_exact(L, N, G, epsilon):
     P = compute_P(v, L, N)
     return E, np.diag(P)
 
+
 def form_basis(L, N):
     basis = boson_basis_1d(L, N, sps=2) # specifying one boson per site
     # print(basis)
     return basis
+
 
 def form_hyperbolic_hamiltonian(L, N, G, epsilon):
     basis = form_basis(L, N)
@@ -45,11 +47,12 @@ def form_hyperbolic_hamiltonian(L, N, G, epsilon):
     return H
 
 def compute_E(L, N, G, epsilon):
-    H = form_hyperbolic_hamiltonian(L, N, G, epsilon)
-    # print(H)
-    w = np.linalg.eigvalsh(H)
-    return min(H)
-
+    sqeps = np.sqrt(epsilon)
+    J = -G*np.outer(sqeps, sqeps) + np.diag(epsilon)
+    D = np.zeros((L,L), float)
+    H = build_mb_hamiltonian(J, D, L, N)
+    w, v = np.linalg.eigh(H)
+    return w # returning full spectrum just for funsies
 
 
 if __name__ == '__main__':
