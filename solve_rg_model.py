@@ -104,7 +104,7 @@ def use_g_inv(L, N, G, Z, delta, g_step):
                 -G)
     # print('G for part 2: {}'.format(part2G))
     part2 = -(1+part2G*(N-L/2-1))/part2G # array of g^-1
-    print('g^-1 for part 2: {}'.format(part2))
+    # print('g^-1 for part 2: {}'.format(part2))
     Lambda = delta/part1[-1]
     for g in part2:
         sol = root(lambda_relations, Lambda, args=(L, N, Z,
@@ -122,9 +122,17 @@ def use_g_inv(L, N, G, Z, delta, g_step):
     return delta
 
 
+def make_g_path(gf, g_step):
+    if gf < 0:
+        g_path = -np.append(np.arange(0, -gf, g_step), -gf)
+    else:
+        g_path = np.append(np.arange(0, gf, g_step), gf)
+    return g_path
+
+
 def compute_hyperbolic_energy(L, N, G, epsilon,
         g_step, holdover=0, taylor_expand=False,
-        return_matrix=False, try_g_inv=True):
+        try_g_inv=True, skip_Grg=True):
     """Compute the exact energy using the integrals of motion.
 
     Args:
@@ -154,30 +162,23 @@ def compute_hyperbolic_energy(L, N, G, epsilon,
     delta[eps_min[:N]] = -2
 
     Gp = 1./(1-N+L/2)
+    Grg = 1./(L-2*N+1)
     lambd = 1/(1 + G*(N - L/2 - 1))
     g_final = -G*lambd
+    grg = -Grg/(1+Grg*(N-L/2-1))
     if G < 0.9*Gp and try_g_inv: # need to do some trickz
         print('Using inverted g stuff')
         delta = use_g_inv(L, N, G, Z, delta, g_step)
-    else: # we can just increment G
-        # Points over which we will iterate until we reach g_final.
-        g_path = g_final * np.append(
-                np.arange(0, 1, g_step, dtype=np.float64), 1)
-        # if g_final > 0:
-            # g_path = np.append(np.arange(0, g_final, g_step,
-                # dtype=np.float64), g_final)
-        # elif g_final < 0:
-            # g_path = -np.append(np.arange(0, -g_final, g_step,
-                # dtype=np.float64), -g_final)
-        # else:
-            # g_path = np.array([0], dtype=np.float64)
+    else:
+        if Grg < 0 and G < 1.05*Grg and skip_Grg:  # we hit a problem ONLY at Grg
+            part1 = make_g_path(0.95*grg, g_step)
+            part2 = np.append(np.arange(1.04*grg, g_final, g_step), g_final)
+            g_path = np.concatenate((part1, part2))
+        else: # no spcial handling needed
+            # Points over which we will iterate until we reach g_final.
+            g_path = make_g_path(g_final, g_step)
         # Finding root while varying g, using prev. solution to start
         for i, g in enumerate(g_path):
-            # if i != 0 and np.abs(g - g_path[i-1]) > 3:
-                # print('G jumped big, gonna pass, setting high holdover')
-                # holdover = 0.8
-                # pass # just going to skip for now
-            # else:
             sol = root(delta_relations, delta, args=(L, N, Z, g, Gamma),
                        method='lm')
             last = delta
@@ -186,8 +187,8 @@ def compute_hyperbolic_energy(L, N, G, epsilon,
             sol = root(delta_relations, delta, args=(L, N, Z, g_final,
                        Gamma), method = 'lm')
             delta = sol.x
-        # checking accuracy of solutions
     g = g_final
+    # checking if we satisfy the delta relations
     dr = delta_relations(delta, L, N, Z, g, Gamma)
     if np.max(dr)> 10**-12:
         print('WARNING: At G= {} error is {}'.format(
@@ -200,9 +201,7 @@ def compute_hyperbolic_energy(L, N, G, epsilon,
     ri = -1/2 - delta/2 + g/4*np.sum(Z, axis=1)
     E = 1/lambd*np.dot(epsilon, ri) + np.sum(epsilon)*(1/2 - 3/4*G)
     n, A = compute_particle_number(delta, L, N, Z, g, Gamma)
-    if return_matrix:
-        return E, n, delta, A
-    return E, n, delta, success
+    return E, n, delta, A
 
 
 def compute_iom_energy(L, N, G, model, epsilon,

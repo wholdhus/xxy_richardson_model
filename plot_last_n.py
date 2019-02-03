@@ -33,13 +33,7 @@ condsb = np.zeros(steps)
 for i, G in enumerate(Gs):
     print("")
     print('G = {}'.format(G))
-    # using insufficient stepz
-    # E_bad, n_bad, delta, s = compute_hyperbolic_energy(L, N, G, epsilon, g_step, return_matrix=True, try_g_inv=True)
-    # nsb[i] = n_bad[N-1]
-    # esb[i] = E_bad
-    # condsb[i] = np.linalg.cond(s)
-    # now with more stepz
-    E_good, n_good, delta, s = compute_hyperbolic_energy(L, N, G, epsilon, g_step, return_matrix=True, try_g_inv=True)
+    E_good, n_good, delta, s = compute_hyperbolic_energy(L, N, G, epsilon, g_step, try_g_inv=True)
     ns[i] = n_good[N-1]
     jumps[i] = n_good[N-1] - n_good[N]
 

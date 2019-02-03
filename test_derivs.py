@@ -39,7 +39,7 @@ for i, G in enumerate(Gs):
     print('')
     print('Trying G-Gc = {}'.format(G-Gc))
     E, n, delta, A = compute_hyperbolic_energy(L, N, G, epsilon,
-                                               g_step=g_step, return_matrix=True)
+                                               g_step=g_step)
     ns1[i] = n
     deltas1[i] = delta
     _, svs, _ = np.linalg.svd(A)
