@@ -125,38 +125,17 @@ def make_g_path(gf, g_step):
     return g_path
 
 
-def compute_hyperbolic_energy(L, N, G, epsilon,
+def compute_hyperbolic_deltas(L, N, G, epsilon,
         g_step, holdover=0, taylor_expand=False,
         try_g_inv=True, skip_Grg=True, start=0.9,
         use_finite_diff=False):
-    """Compute the exact energy using the integrals of motion.
-
-    Args:
-        L (int): system's size.
-        N (int): particle number.
-        G (float): interaction strength.
-        epsilon (1darray of floats): epsilon values.
-
-    Returns:
-        E (float): ground state energy.
-        n (1darray of floats): occupation numbers.
-
-    """
     Gamma = -1 # hyperbolic case
-
     # Compute Z matrix.
     Z = np.zeros((L, L))
     for i in range(L):
         for j in range(i):  # j < i.
             Z[i, j] = (epsilon[i] + epsilon[j])/(epsilon[i]-epsilon[j])
             Z[j, i] = -Z[i, j]
-
-    # Initial values for Delta with g small. The -2 values (initially
-    # occupied states) go where the epsilons are smallest.
-    delta = np.zeros(L, np.float64)
-    eps_min = np.argsort(epsilon)
-    delta[eps_min[:N]] = -2
-
     Gp = 1./(1-N+L/2)
     Grg = 1./(L-2*N+1)
     lambd = 1/(1 + G*(N - L/2 - 1))
@@ -164,7 +143,7 @@ def compute_hyperbolic_energy(L, N, G, epsilon,
     grg = -Grg/(1+Grg*(N-L/2-1))
     if G < start*Gp and try_g_inv: # need to do some trickz
         print('Using inverted g stuff')
-        delta = use_g_inv(L, N, G, Z, delta, g_step, start)
+        deltas = use_g_inv(L, N, G, Z, epsilon, g_step, start)
     else:
         if Grg < 0 and G < 1.1*Grg and skip_Grg:
             print('Skipping Grg')
@@ -178,47 +157,49 @@ def compute_hyperbolic_energy(L, N, G, epsilon,
         else:
             # no spcial handling needed
             g_path = make_g_path(g_final, g_step)
+        g_path = g_path[1:] # don't need to start at 0
+        # Initial values for Delta with g small. The -2 values (initially
+        # occupied states) go where the epsilons are smallest.
+        deltas = np.zeros((L, len(g_path) + 1), np.float64)
+        eps_min = np.argsort(epsilon)
+        deltas[0][eps_min[:N]] = -2
+
         # Finding root while varying g, using prev. solution to start
         for i, g in enumerate(g_path):
-            sol = root(delta_relations, delta, args=(L, N, Z, g, Gamma),
+            sol = root(delta_relations, deltas[i], args=(L, N, Z, g, Gamma),
                        method='lm')
-            last = delta
-            delta = (1 - holdover) * sol.x + holdover * last
+            deltas[i+1] = (1 - holdover) * sol.x + holdover * deltas[i]
         if holdover != 0:
-            sol = root(delta_relations, delta, args=(L, N, Z, g_final,
+            sol = root(delta_relations, deltas[-1], args=(L, N, Z, g_final,
                        Gamma), method = 'lm')
-            delta = sol.x
+            deltas[-1] = sol.x
     g = g_final
     # checking if we satisfy the delta relations
-    dr = delta_relations(delta, L, N, Z, g, Gamma)
+    dr = delta_relations(deltas[-1], L, N, Z, g, Gamma)
     if np.max(dr)> 10**-12:
         print('WARNING: At G= {} error is {}'.format(
                 G, np.max(dr)))
-        success = False
-    else: # at least reasonably accurate
-        success = True
+    return g_path, deltas, Z
 
+
+def compute_hyperbolic_energy(L, N, G, epsilon, g_step)
+    g_path, deltas, Z = compute_hyperbolic_deltas(L, N, G,
+                                                  epsilon, g_step)
+    # taking derivatives via finite difference
+    differences = np.array([g_step for i in range(len(g_path))])
+    differences[-1] = g_path[-1] - g_path[-2]
+    der_deltas = np.gradient(deltas, differences, axis=0)
+    l = len(g_path)
     # Now forming eigenvalues of IM and observables
-    ri = -1/2 - delta/2 + g/4*np.sum(Z, axis=1)
-    E = 1/lambd*np.dot(epsilon, ri) + np.sum(epsilon)*(1/2 - 3/4*G)
-    if use_finite_diff:
-        # can't use previous step because second to last step != g_step
-        sol = root(delta_relations, delta, args=(L, N, Z, g-g_step, Gamma),
-                   method = 'lm')
-        last_delta = sol.x
-        sol = root(delta_relations, delta, args=(L, N, Z, g+g_step, Gamma),
-                   method = 'lm')
-        next_delta = sol.x
-        nfd, derfd = compute_particle_number_fd(delta, last_delta, 
-                                                next_delta, g, g_step)
-        nlin, A, derlin = compute_particle_number(delta, L, N, Z, g, Gamma)
-        print('Difference in the derivatives is:')
-        print(derfd-derlin)
-        n = nfd
-    else:
-        nlin, A, derlin = compute_particle_number(delta, L, N, Z, g, Gamma)
-        n = nlin
-    return E, n, delta, A
+    ioms = np.zeros((L, l))
+    energies = np.zeros(l)
+    G_path = -g_path/(1+g_path(N-L/2-1))
+    lambds = 1/(1 + G_path*(N - L/2 - 1))
+    for i, g in enumerate(g_path):
+        ioms[i] = -1./2 - delta/2 + g/4*np.sum(Z, axis=1)
+        energies[i] = (1/lambds[i] * np.dot(epsilon, ioms[i])
+                       + np.sum(epsilon)*(1./2 - 3/4*G_path[i]))
+    return energies, nsk, deltas
 
 
 def compute_iom_energy(L, N, G, model, epsilon,
