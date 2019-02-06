@@ -80,41 +80,58 @@ def compute_particle_number(Delta, L, N, Z, g, Gamma):
     return n, A, ders
 
 
-def use_g_inv(L, N, G, Z, delta, g_step, start=0.9, finish=1.1):
+def use_g_inv(L, N, G, Z, g_step, start=0.9, finish=1.1):
     Gamma = -1
     GP = 1./(1-N+L/2)
     lambd1 = 1/(1 + start*GP*(N - L/2 - 1))
     gf1 = -start*GP*lambd1
-    part1 = np.append(np.arange(0, gf1, g_step, dtype=np.float64),
-            gf1)
-    for g in part1:
-        sol = root(delta_relations, delta, args=(L, N, Z, g, Gamma),
-                method='lm')
-        delta = sol.x # not doing any holdover stuff since it doesn't work
+    g_path_1 = np.append(np.arange(0, gf1, g_step, dtype=np.float64),
+                         gf1)
+
+    g_path_1 = g_path_1[1:]
     if G < finish*GP:
-        part2G = -np.append(np.arange(-start*GP, -finish*GP, g_step),
+        G_path_2 = -np.append(np.arange(-start*GP, -finish*GP, g_step),
                 -finish*GP)
     else:
-        part2G = -np.append(np.arange(-start*GP, -G, g_step),
+        G_path_2 = -np.append(np.arange(-start*GP, -G, g_step),
                 -G)
-    # print('G for part 2: {}'.format(part2G))
-    part2 = -(1+part2G*(N-L/2-1))/part2G # array of g^-1
-    # print('g^-1 for part 2: {}'.format(part2))
-    Lambda = delta/part1[-1]
-    for g in part2:
+    g_path_2 = -G_path_2/(1+G_path_2*(N-L/2-1))
+    ginv_path_2 = 1/g_path_2
+    # number of steps we'll take
+    l = len(g_path_1) + len(ginv_path_2)
+
+    if G < finish*GP: # still need to do the last bit
+        G_path_3 = -np.append(np.arange(-finish*GP, -G, g_step), -G)
+        lambds3 = 1/(1+part3G*(N-L/2-1))
+        g_path_3 = -part3G*lambds3
+        l = l + len(g_path_3)
+
+    deltas = np.zeros((L,l), np.float64)
+    deltas[0][:N] = -2 # assuming these have lowest epsilon
+
+    # Now we have our route!
+
+    for i, g in enumerate(g_path_1[1:]): # skipping 0
+        delta = deltas[i]
+        sol = root(delta_relations, delta, args=(L, N, Z, g, Gamma),
+                method='lm')
+        deltas[i+1] = sol.x
+    Lambda = deltas[len(g_path)-1]/g_path_1[-1]
+
+    for i, g in enumerate(ginv_path_2):
+        j = i + len(g_path_1) - 1
         sol = root(lambda_relations, Lambda, args=(L, N, Z,
                    g, Gamma), method='lm')
         Lambda = sol.x
-    delta = Lambda/part2[-1]
-    if G < finish*GP: # still need to do the last bit
-        part3G = -np.append(np.arange(-finish*GP, -G, g_step), -G)
-        lambds3 = 1/(1+part3G*(N-L/2-1))
-        part3 = -part3G*lambds3
-        for g in part3:
+        deltas[j+1] = Lambda/g
+    if G < finish*GP:
+        for i, g in enumerate(part3):
+            j = i + len(g_path_1) + len(ginv_path_2) - 1
+            delta = deltas[j]
             sol = root(delta_relations, delta, args=(L, N, Z, g,
                        Gamma), method= 'lm')
-            delta = sol.x
-    return delta
+            deltas[j+1] = sol.x
+    return deltas, np.concat((g_path_1, g_path_2, g_path_3))
 
 
 def make_g_path(gf, g_step):
@@ -125,10 +142,7 @@ def make_g_path(gf, g_step):
     return g_path
 
 
-def compute_hyperbolic_deltas(L, N, G, epsilon,
-        g_step, holdover=0, taylor_expand=False,
-        try_g_inv=True, skip_Grg=True, start=0.9,
-        use_finite_diff=False):
+def compute_hyperbolic_deltas(L, N, G, epsilon, g_step):
     Gamma = -1 # hyperbolic case
     # Compute Z matrix.
     Z = np.zeros((L, L))
@@ -141,11 +155,11 @@ def compute_hyperbolic_deltas(L, N, G, epsilon,
     lambd = 1/(1 + G*(N - L/2 - 1))
     g_final = -G*lambd
     grg = -Grg/(1+Grg*(N-L/2-1))
-    if G < start*Gp and try_g_inv: # need to do some trickz
+    if G < 0.9*Gp and try_g_inv: # need to do some trickz
         print('Using inverted g stuff')
-        deltas = use_g_inv(L, N, G, Z, epsilon, g_step, start)
+        deltas, g_path = use_g_inv(L, N, G, Z, epsilon, g_step)
     else:
-        if Grg < 0 and G < 1.1*Grg and skip_Grg:
+        if Grg < 0 and G < 1.1*Grg:
             print('Skipping Grg')
             # TODO: add holdover to cover just the jump from this
             # we hit a problem ONLY at Grg
@@ -160,155 +174,61 @@ def compute_hyperbolic_deltas(L, N, G, epsilon,
         g_path = g_path[1:] # don't need to start at 0
         # Initial values for Delta with g small. The -2 values (initially
         # occupied states) go where the epsilons are smallest.
-        deltas = np.zeros((L, len(g_path) + 1), np.float64)
+        deltas = np.zeros((len(g_path) + 1, L), np.float64)
         eps_min = np.argsort(epsilon)
         deltas[0][eps_min[:N]] = -2
 
         # Finding root while varying g, using prev. solution to start
         for i, g in enumerate(g_path):
-            sol = root(delta_relations, deltas[i], args=(L, N, Z, g, Gamma),
+            delta = deltas[i]
+            sol = root(delta_relations, delta, args=(L, N, Z, g, Gamma),
                        method='lm')
-            deltas[i+1] = (1 - holdover) * sol.x + holdover * deltas[i]
-        if holdover != 0:
-            sol = root(delta_relations, deltas[-1], args=(L, N, Z, g_final,
-                       Gamma), method = 'lm')
-            deltas[-1] = sol.x
-    g = g_final
+            deltas[i+1] = sol.x
     # checking if we satisfy the delta relations
-    dr = delta_relations(deltas[-1], L, N, Z, g, Gamma)
+    dr = delta_relations(deltas[-1], L, N, Z, g_path[-1], Gamma)
     if np.max(dr)> 10**-12:
         print('WARNING: At G= {} error is {}'.format(
-                G, np.max(dr)))
+              G, np.max(dr)))
+    g_path = np.concatenate(([0], g_path)) # removed 0 earlier
     return g_path, deltas, Z
 
 
-def compute_hyperbolic_energy(L, N, G, epsilon, g_step)
+def compute_hyperbolic_energy(L, N, G, epsilon, g_step):
     g_path, deltas, Z = compute_hyperbolic_deltas(L, N, G,
                                                   epsilon, g_step)
     # taking derivatives via finite difference
-    differences = np.array([g_step for i in range(len(g_path))])
-    differences[-1] = g_path[-1] - g_path[-2]
-    der_deltas = np.gradient(deltas, differences, axis=0)
+    # print(deltas)
+    der_deltas = np.gradient(deltas, g_path, axis=0)
     l = len(g_path)
     # Now forming eigenvalues of IM and observables
-    ioms = np.zeros((L, l))
+    ioms = np.zeros((l, L))
+    nsk = np.zeros((l, L))
     energies = np.zeros(l)
-    G_path = -g_path/(1+g_path(N-L/2-1))
+    G_path = -g_path/(1+g_path*(N-L/2-1))
     lambds = 1/(1 + G_path*(N - L/2 - 1))
     for i, g in enumerate(g_path):
-        ioms[i] = -1./2 - delta/2 + g/4*np.sum(Z, axis=1)
+        ioms[i] = -1./2 - deltas[i]/2 + g/4*np.sum(Z, axis=1)
         energies[i] = (1/lambds[i] * np.dot(epsilon, ioms[i])
                        + np.sum(epsilon)*(1./2 - 3/4*G_path[i]))
-    return energies, nsk, deltas
+        nsk[i] = -0.5 * deltas[i] + 0.5*g*der_deltas[i]
+    return energies, nsk, deltas, G_path
 
-
-def compute_iom_energy(L, N, G, model, epsilon,
-        steps=100, return_delta=False, return_n=True,
-        taylor_expand=False):
-    """Compute the exact energy using the integrals of motion.
-
-    Args:
-        L (int): system's size.
-        N (int): particle number.
-        G (float): interaction strength.
-        model (str): type of integrable model. Can be 'rational' or
-            'hyperbolic'.
-        epsilon (1darray of floats): epsilon values.
-
-    Returns:
-        E (float): ground state energy.
-        n (1darray of floats): occupation numbers.
-
-    """
-    # Determine the value of the constant Gamma.
-    if (model != 'rational') and (model != 'hyperbolic'):
-        raise ValueError('Model should be either rational or hyperbolic.')
-
-    Gamma = 0 if model == 'rational' else -1
-
-    # Compute Z matrix.
-    Z = np.zeros((L, L), np.float64)
-    for i in range(L):
-        for j in range(i):  # j < i.
-            if model == 'hyperbolic':
-                Z[i, j] = (epsilon[i] + epsilon[j])/(epsilon[i]-epsilon[j])
-            elif model == 'rational':
-                Z[i, j] = 1/(epsilon[i] - epsilon[j])
-            Z[j, i] = -Z[i, j]
-
-    # Initial values for Delta with g small. The -2 values (initially
-    # occupied states) go where the epsilons are smallest.
-    delta = np.zeros(L, np.float64)
-    eps_min = np.argsort(epsilon)
-    delta[eps_min[:N]] = -2
-
-    G_step = np.abs(G)/steps
-    if G == 0:
-        G_path = np.array([0])
-    elif G > 0:
-        G_path = np.append(np.arange(0, G, G_step), G)
-    else:
-        G_path = -np.append(np.arange(0, -G, G_step), -G)
-    # g_step = np.abs(g_final)/steps
-    # g_path = np.linspace(0, np.abs(g_final), steps)
-    # if g_final > 0:
-        # g_path = np.append(np.arange(0, g_final, g_step), g_final)
-    # elif g_final < 0:
-        # g_path = -np.append(np.arange(0, -g_final, g_step), -g_final)
-    # inc = np.all(g_path[1:] >= g_path[:-1])
-    # dec = np.all(g_path[1:] <= g_path[:-1])
-    # finding root while varying g, using prev. solution to start
-
-    # Finding value of g (used in numerics) corresponding to G
-    if model =='rational':
-        g_path = -2*G_path
-    else: # hyperbolic
-        lambd = 1/(1 + G_path*(N - L/2 - 1))
-        g_path = -G_path*lambd
-
-    for g in g_path:
-        sol = root(delta_relations, delta, args=(L, N, Z, g, Gamma),
-                   method='lm')
-        delta = sol.x
-
-        if taylor_expand and g != g_final:
-            # Now applying taylor approx for next delta(g+dg)
-            # Not doing this for final g value
-            try:
-                ddelta = der_delta(delta, L, N, Z, g, Gamma,
-                                   throw=True)
-                delta = delta + g_step*ddelta
-            except Exception as e:
-                print('Problem with derivatives: {}'.format(e))
-
-    # checking accuracy of solutions
-    dr = delta_relations(delta, L, N, Z, g, Gamma)
-    if np.max(dr)> 10**-12:
-        print('WARNING: At G= {} error is {}'.format(
-                G, np.max(dr)))
-
-    # Now forming eigenvalues of IM and observables
-    if model == 'rational':
-        # Eigenvalues of the IM.
-        ri = -1/2 - delta/2 + g/4*np.sum(Z, axis=1)
-        E = np.dot(epsilon, ri) + np.sum(epsilon)/2+G*((N-L/2)**2-N- L/4)
-        if return_n:
-            n, A, deriv = compute_particle_number(delta, L, N, Z, g, Gamma)
-    elif model == 'hyperbolic':
-        # Eigenvalues of the IM.
-        ri = -1/2 - delta/2 + g/4*np.sum(Z, axis=1)
-        E = 1/lambd[-1]*np.dot(epsilon, ri) + np.sum(epsilon)*(1/2 - 3/4*G)
-        if return_n:
-            n, A, deriv = compute_particle_number(delta, L, N, Z, g, Gamma)
-
-    if return_delta and return_n:
-        return E, n, delta, A
-    elif return_n:
-        return E, n
-    else:
-        return E
 
 def rgk_spectrum(L, t1, t2):
     k = np.linspace(0, 1, L)*np.pi
     epsilon = -0.5 * t1 * (np.cos(k) - 1) - 0.5 * t2 * (np.cos(2*k) -1)
     return k, epsilon
+
+
+if __name__ == '__main__':
+    import matplotlib.pyplot as plt
+    import sys
+    L = int(sys.argv[1])
+    N = int(sys.argv[2])
+    g_step = float(sys.argv[3])
+    G = 1.1/(L-2*N+1)
+    k, epsilon = rgk_spectrum(L, 1, 0)
+    E, n, Delta, G = compute_hyperbolic_energy(L, N, G, epsilon, g_step)
+    plt.scatter(G, E)
+    plt.axvline(1./(L-2*N+1))
+    plt.show()
