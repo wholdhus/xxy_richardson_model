@@ -59,43 +59,38 @@ def der_delta(Delta, L, N, Z, g, Gamma, throw=False, scale=1):
 
     # This is no longer accurate and I don't get it
     print('Condition number: {}'.format(np.round(cn,2)))
-    print('We are losing around {} digits.'.format(np.round(np.log10(cn),2)))
-    # print('The derivatives of delta are accurate'
-          # + f' up to the {16 + np.log10(cn):3.0f}th digit.')
+    print('We are losing around {} digits.'.format(
+          np.round(np.log10(cn),2)))
     x = np.zeros(L, np.float64)
     x[:-1] = solve(A, b)
     x[-1] = -np.sum(x[:-1])
-    # print('This is at g = {}'.format(g))
-    # prod = np.matmul(A, x[:-1]) - b
-    # maxdif = np.max(np.abs(prod))
-    # mindif = np.min(np.abs(prod))
-    # print('Relative max error of Ax-b = 0 is {}'.format(mindif/maxdif))
-    # print(x)
-
     return x/scale, A
+
+
+def compute_particle_number_fd(Delta, lastDelta, nextDelta, g, g_step):
+    der_delta = (nextDelta - lastDelta)/(2*g_step)
+    n = -0.5 * Delta + 0.5*g*der_delta
+    return n, der_delta
 
 
 def compute_particle_number(Delta, L, N, Z, g, Gamma):
     """Compute the occupation numbers (Eq 11)."""
     ders, A = der_delta(Delta, L, N, Z, g, Gamma)
     n = -0.5*Delta +  0.5*g*ders
-    return n, A
+    return n, A, ders
 
 
-def use_g_inv(L, N, G, Z, delta, g_step):
-    start = 0.9
-    finish = 1.1
+def use_g_inv(L, N, G, Z, delta, g_step, start=0.9, finish=1.1):
     Gamma = -1
     GP = 1./(1-N+L/2)
     lambd1 = 1/(1 + start*GP*(N - L/2 - 1))
     gf1 = -start*GP*lambd1
     part1 = np.append(np.arange(0, gf1, g_step, dtype=np.float64),
             gf1)
-    # gnext = gf1 + g_step
     for g in part1:
         sol = root(delta_relations, delta, args=(L, N, Z, g, Gamma),
                 method='lm')
-        delta = sol.x # not doing any holdover shit
+        delta = sol.x # not doing any holdover stuff since it doesn't work
     if G < finish*GP:
         part2G = -np.append(np.arange(-start*GP, -finish*GP, g_step),
                 -finish*GP)
@@ -132,7 +127,8 @@ def make_g_path(gf, g_step):
 
 def compute_hyperbolic_energy(L, N, G, epsilon,
         g_step, holdover=0, taylor_expand=False,
-        try_g_inv=True, skip_Grg=True):
+        try_g_inv=True, skip_Grg=True, start=0.9,
+        use_finite_diff=False):
     """Compute the exact energy using the integrals of motion.
 
     Args:
@@ -166,16 +162,21 @@ def compute_hyperbolic_energy(L, N, G, epsilon,
     lambd = 1/(1 + G*(N - L/2 - 1))
     g_final = -G*lambd
     grg = -Grg/(1+Grg*(N-L/2-1))
-    if G < 0.9*Gp and try_g_inv: # need to do some trickz
+    if G < start*Gp and try_g_inv: # need to do some trickz
         print('Using inverted g stuff')
-        delta = use_g_inv(L, N, G, Z, delta, g_step)
+        delta = use_g_inv(L, N, G, Z, delta, g_step, start)
     else:
-        if Grg < 0 and G < 1.05*Grg and skip_Grg:  # we hit a problem ONLY at Grg
-            part1 = make_g_path(0.95*grg, g_step)
-            part2 = np.append(np.arange(1.04*grg, g_final, g_step), g_final)
+        if Grg < 0 and G < 1.1*Grg and skip_Grg:
+            print('Skipping Grg')
+            # TODO: add holdover to cover just the jump from this
+            # we hit a problem ONLY at Grg
+            part1 = make_g_path(0.9*grg, g_step)
+            # g is positive here even though G < 0
+            part2 = np.append(np.arange(1.1*grg, g_final, g_step),
+                               g_final)
             g_path = np.concatenate((part1, part2))
-        else: # no spcial handling needed
-            # Points over which we will iterate until we reach g_final.
+        else:
+            # no spcial handling needed
             g_path = make_g_path(g_final, g_step)
         # Finding root while varying g, using prev. solution to start
         for i, g in enumerate(g_path):
@@ -200,7 +201,23 @@ def compute_hyperbolic_energy(L, N, G, epsilon,
     # Now forming eigenvalues of IM and observables
     ri = -1/2 - delta/2 + g/4*np.sum(Z, axis=1)
     E = 1/lambd*np.dot(epsilon, ri) + np.sum(epsilon)*(1/2 - 3/4*G)
-    n, A = compute_particle_number(delta, L, N, Z, g, Gamma)
+    if use_finite_diff:
+        # can't use previous step because second to last step != g_step
+        sol = root(delta_relations, delta, args=(L, N, Z, g-g_step, Gamma),
+                   method = 'lm')
+        last_delta = sol.x
+        sol = root(delta_relations, delta, args=(L, N, Z, g+g_step, Gamma),
+                   method = 'lm')
+        next_delta = sol.x
+        nfd, derfd = compute_particle_number_fd(delta, last_delta, 
+                                                next_delta, g, g_step)
+        nlin, A, derlin = compute_particle_number(delta, L, N, Z, g, Gamma)
+        print('Difference in the derivatives is:')
+        print(derfd-derlin)
+        n = nfd
+    else:
+        nlin, A, derlin = compute_particle_number(delta, L, N, Z, g, Gamma)
+        n = nlin
     return E, n, delta, A
 
 
@@ -295,13 +312,13 @@ def compute_iom_energy(L, N, G, model, epsilon,
         ri = -1/2 - delta/2 + g/4*np.sum(Z, axis=1)
         E = np.dot(epsilon, ri) + np.sum(epsilon)/2+G*((N-L/2)**2-N- L/4)
         if return_n:
-            n, A = compute_particle_number(delta, L, N, Z, g, Gamma)
+            n, A, deriv = compute_particle_number(delta, L, N, Z, g, Gamma)
     elif model == 'hyperbolic':
         # Eigenvalues of the IM.
         ri = -1/2 - delta/2 + g/4*np.sum(Z, axis=1)
         E = 1/lambd[-1]*np.dot(epsilon, ri) + np.sum(epsilon)*(1/2 - 3/4*G)
         if return_n:
-            n, A = compute_particle_number(delta, L, N, Z, g, Gamma)
+            n, A, deriv = compute_particle_number(delta, L, N, Z, g, Gamma)
 
     if return_delta and return_n:
         return E, n, delta, A
