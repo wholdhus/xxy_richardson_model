@@ -7,10 +7,12 @@ if len(sys.argv) == 4:
     L = int(sys.argv[1])
     N = int(sys.argv[2])
     g_step = float(sys.argv[3])/L
+    expo = float(sys.argv[4])
 else:
     L = 20
     N = 13
     g_step = 0.1/L
+    expo=2
 
 print('Running with params L, N, steps = {}, {}, {}'.format(
     L, N, g_step))
@@ -20,11 +22,9 @@ Grg = 1./(L-2*N+1)
 G = 5.*Grg
 
 k, epsilon = rgk_spectrum(L, 1, 0)
-epsilon = k**2
-epsilon = epsilon + 0.1
+epsilon = k**expo
 
 energies, nsk, deltas, Gs, Z = compute_hyperbolic_energy(L, N, G, epsilon, g_step)
-
 
 Energy = pd.DataFrame({'G': Gs, 'Energy': energies}, index = Gs)
 Ns = pd.DataFrame({'k': k, 'epsilon': epsilon}, index = k)

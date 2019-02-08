@@ -5,4 +5,4 @@
 #PBS -m abe
 #PBS -N L100N75Mixy
 #PBS -j oe
-python karst_code.py 100 75
+python karst_code.py 200 150 .1 3
