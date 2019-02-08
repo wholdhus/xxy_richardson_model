@@ -9,19 +9,15 @@ L = int(sys.argv[1])
 N = int(0.75*L)
 Grg = 1./(L-2*N+1)
 Gp = -1./(N-L/2-1)
-k, rgke = rgk_spectrum(L, 1, 0)
-# plt.plot(rgke, color='b')
-# plt.plot(k**2, color='g')
-# plt.plot(1-np.cos(k/2), color='orange')
-# plt.plot(np.sin(k/2)**2, color='black')
-# plt.show()
-# epsilon = 1-np.cos(k/2)
+k, rgke = rgk_spectrum(L, 1, 0, start_neg=False)
 if len(sys.argv) > 2:
     epsilon = k**float(sys.argv[2])
 else:
-    epsilon = k**2
+    epsilon = rgke
 G = Grg * 1.51
-g_step = .1/L
+g_step = 0.1/L
+if len(sys.argv) > 3:
+    g_step = float(sys.argv[3])/L
 energies, nsk, deltas, Gs, Z = compute_hyperbolic_energy(L, N, G, epsilon,
                                                          g_step)
 fig = plt.figure(figsize=(12, 8))
