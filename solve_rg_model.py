@@ -20,6 +20,7 @@ def delta_relations(Delta, L, N, Z, g, Gamma):
     return rels
 
 
+
 def lambda_relations(Lambda, L, N, Z, ginv, Gamma):
     rels = np.zeros(L+1, np.float64)
     ginv2 = ginv**2
@@ -201,7 +202,15 @@ def compute_hyperbolic_energy(L, N, G, epsilon, g_step, skip_Grg=False,
                                                   skip_Grg=skip_Grg,
                                                   start=start)
     # taking derivatives via finite difference
-    der_deltas = np.gradient(deltas, g_path, axis=0)
+    # der_deltas = np.gradient(deltas, g_path, axis=0)
+    # Need to do my own version of gradient because doesn't work on karst
+    s = np.shape(deltas)
+    der_deltas = np.zeros(s)
+    der_deltas[0] = (deltas[1] - deltas[0])/(g_path[1] - g_path[0])
+    der_deltas[-1] = (deltas[-1] - deltas[-2])/(g_path[-1] - g_path[-2])
+    for i, g in enumerate(g_path):
+        if i !=0 and i != len(g_path) - 1:
+            der_deltas[i] = (deltas[i+1] - deltas[i-1])/(g_path[i+1] - g_path[i-1])
     l = len(g_path)
     # Now forming eigenvalues of IM and observables
     ioms = np.zeros((l, L))
