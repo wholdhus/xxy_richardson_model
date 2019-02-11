@@ -96,15 +96,15 @@ def use_g_inv(L, N, G, Z, g_step, start=0.9):
     gf1 = -start*GP*lambd1
     g_path_1 = make_g_path(gf1, g_step)[1:]
     if G < finish*GP:
-        G_path_2 = -np.append(np.arange(-start*GP + g_step/10, -finish*GP, 
-                              g_step), -finish*GP)
+        G_path_2 = -np.append(np.arange(-start*GP + g_step/10, -finish*GP,
+                              g_step/10), -finish*GP)
     else:
-        G_path_2 = -np.append(np.arange(-start*GP + g_step/10, -G, g_step),
+        G_path_2 = -np.append(np.arange(-start*GP + g_step/10, -G, g_step/10),
                               -G)
     g_path_2 = -G_path_2/(1+G_path_2*(N-L/2-1))
     ginv_path_2 = 1/g_path_2
     # number of steps we'll take
-    l = len(g_path_1) + len(ginv_path_2) + 1 
+    l = len(g_path_1) + len(ginv_path_2) + 1
     g_path = np.concatenate((g_path_1, g_path_2))
     if G < finish*GP: # still need to do the last bit
         G_path_3 = -np.append(np.arange(-finish*GP + g_step/10, -G, g_step), -G)
@@ -202,15 +202,17 @@ def compute_hyperbolic_energy(L, N, G, epsilon, g_step, skip_Grg=False,
                                                   skip_Grg=skip_Grg,
                                                   start=start)
     # taking derivatives via finite difference
-    # der_deltas = np.gradient(deltas, g_path, axis=0)
-    # Need to do my own version of gradient because doesn't work on karst
-    s = np.shape(deltas)
-    der_deltas = np.zeros(s)
-    der_deltas[0] = (deltas[1] - deltas[0])/(g_path[1] - g_path[0])
-    der_deltas[-1] = (deltas[-1] - deltas[-2])/(g_path[-1] - g_path[-2])
-    for i, g in enumerate(g_path):
-        if i !=0 and i != len(g_path) - 1:
-            der_deltas[i] = (deltas[i+1] - deltas[i-1])/(g_path[i+1] - g_path[i-1])
+    try:
+        der_deltas = np.gradient(deltas, g_path, axis=0)
+    except: # Need to do my own version of gradient because doesn't work on karst
+        print('Numpy gradient failed. Doing my own version')
+        s = np.shape(deltas)
+        der_deltas = np.zeros(s)
+        der_deltas[0] = (deltas[1] - deltas[0])/(g_path[1] - g_path[0])
+        der_deltas[-1] = (deltas[-1] - deltas[-2])/(g_path[-1] - g_path[-2])
+        for i, g in enumerate(g_path):
+            if i !=0 and i != len(g_path) - 1:
+                der_deltas[i] = (deltas[i+1] - deltas[i-1])/(g_path[i+1] - g_path[i-1])
     l = len(g_path)
     # Now forming eigenvalues of IM and observables
     ioms = np.zeros((l, L))
