@@ -154,7 +154,10 @@ def compute_hyperbolic_deltas(L, N, G, epsilon, g_step, skip_Grg=False,
     lambd = 1/(1 + G*(N - L/2 - 1))
     g_final = -G*lambd
     # print(g_final)
-    grg = -Grg/(1+Grg*(N-L/2-1))
+    if L != 2*N:
+        grg = -Grg/(1+Grg*(N-L/2-1))
+    else:
+        grg = 10000000000
     if G < start*Gp and G < 0: # need to do some trickz
         print('Using inverted g stuff')
         deltas, g_path = use_g_inv(L, N, G, Z, g_step, start=start)
@@ -226,6 +229,7 @@ def compute_hyperbolic_energy(L, N, G, epsilon, g_step, skip_Grg=False,
                        + np.sum(epsilon)*(1./2 - 3/4*G_path[i]))
         nsk[i] = -0.5 * deltas[i] + 0.5*g*der_deltas[i]
     return energies, nsk, deltas, G_path, Z
+
 
 def rgk_spectrum(L, t1, t2, start_neg=False):
     if start_neg:
