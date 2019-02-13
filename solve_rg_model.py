@@ -232,10 +232,11 @@ def compute_hyperbolic_energy(L, N, G, epsilon, g_step, skip_Grg=False,
 
 
 def rgk_spectrum(L, t1, t2, start_neg=False):
+    r = np.array([(i+1.0)/L for i in range(L)], dtype=np.float64)
     if start_neg:
-        k = np.linspace(-1, 0, L)*np.pi
+        k = (1-r)*np.pi
     else:
-        k = np.linspace(0, 1, L)*np.pi
+        k = r*np.pi
     epsilon = -0.5 * t1 * (np.cos(k) - 1) - 0.5 * t2 * (np.cos(2*k) -1)
     return k, epsilon
 
