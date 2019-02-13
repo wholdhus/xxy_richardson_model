@@ -99,7 +99,8 @@ def use_g_inv(L, N, G, Z, g_step, start=0.9):
         G_path_2 = -np.append(np.arange(-start*GP + g_step/10, -finish*GP,
                               g_step/10), -finish*GP)
     else:
-        G_path_2 = -np.append(np.arange(-start*GP + g_step/10, -G, g_step/10),
+        G_path_2 = -np.append(np.arange(-start*GP + g_step/10, -G,
+                              g_step/10),
                               -G)
     g_path_2 = -G_path_2/(1+G_path_2*(N-L/2-1))
     ginv_path_2 = 1/g_path_2
@@ -107,9 +108,9 @@ def use_g_inv(L, N, G, Z, g_step, start=0.9):
     l = len(g_path_1) + len(ginv_path_2) + 1
     g_path = np.concatenate((g_path_1, g_path_2))
     if G < finish*GP: # still need to do the last bit
-        G_path_3 = -np.append(np.arange(-finish*GP + g_step/10, -G, g_step), -G)
+        G_path_3 = -np.append(np.arange(-finish*GP + g_step/10, -G,
+                              g_step), -G)
         g_path_3 = -G_path_3/(1+G_path_3*(N-L/2-1))
-        l = l + len(g_path_3)
         g_path = np.concatenate((g_path, g_path_3))
 
     deltas = np.zeros((l,L), np.float64)
@@ -149,7 +150,10 @@ def compute_hyperbolic_deltas(L, N, G, epsilon, g_step, skip_Grg=False,
         for j in range(i):  # j < i.
             Z[i, j] = (epsilon[i] + epsilon[j])/(epsilon[i]-epsilon[j])
             Z[j, i] = -Z[i, j]
-    Gp = 1./(1-N+L/2)
+    if 1-N+L/2 != 0:
+        Gp = 1./(1-N+L/2)
+    else:
+        Gp = np.nan
     Grg = 1./(L-2*N+1)
     lambd = 1/(1 + G*(N - L/2 - 1))
     g_final = -G*lambd
@@ -157,23 +161,23 @@ def compute_hyperbolic_deltas(L, N, G, epsilon, g_step, skip_Grg=False,
     if L != 2*N:
         grg = -Grg/(1+Grg*(N-L/2-1))
     else:
-        grg = 10000000000
-    if G < start*Gp and G < 0: # need to do some trickz
+        grg = np.nan
+    if G < start*Gp < 0: # need to do some trickz
         print('Using inverted g stuff')
         deltas, g_path = use_g_inv(L, N, G, Z, g_step, start=start)
-    elif G > start*Gp and G > 0: # need to do similar trixkcx
+    elif G > start*Gp > 0: # need to do similar trixkcx
         print('This is not going to work right now. Woops')
     else:
-        if skip_Grg and G < 0 and G < 1.01*Grg:
+        if skip_Grg and G < Grg < 0:
             g_path_1 = make_g_path(0.95*grg, g_step)
             g_path_2 = np.append(np.arange(1.005*grg, g_final, g_step),
                                  g_final)
             g_path = np.concatenate((g_path_1, g_path_2))[1:]
-        # elif G > 0:
-            # G_path = np.append(np.arange(0, G, g_step), G)
-            # g_path = -G_path/(1+G_path*(N-L/2-1))
-            # g_path = g_path[1:]
-            # print(g_path)
+        elif G > 0:
+            G_path = np.append(np.arange(0, G, g_step), G)
+            g_path = -G_path/(1+G_path*(N-L/2-1))
+            g_path = g_path[1:]
+            print(g_path)
         else:
             g_path = make_g_path(g_final, g_step)
             g_path = g_path[1:] # don't need to start at 0
@@ -199,23 +203,29 @@ def compute_hyperbolic_deltas(L, N, G, epsilon, g_step, skip_Grg=False,
 
 
 def compute_hyperbolic_energy(L, N, G, epsilon, g_step, skip_Grg=False,
-                              start=0.8):
+                              start=0.8, use_fd=True):
     g_path, deltas, Z = compute_hyperbolic_deltas(L, N, G,
                                                   epsilon, g_step,
                                                   skip_Grg=skip_Grg,
                                                   start=start)
-    # taking derivatives via finite difference
-    try:
-        der_deltas = np.gradient(deltas, g_path, axis=0)
-    except: # Need to do my own version of gradient because doesn't work on karst
-        print('Numpy gradient failed. Doing my own version')
+    if use_fd:
+        # taking derivatives via finite difference
+        try:
+            der_deltas = np.gradient(deltas, g_path, axis=0)
+        except: # Need to do my own version of gradient because doesn't work on karst
+            print('Numpy gradient failed. Doing my own version')
+            s = np.shape(deltas)
+            der_deltas = np.zeros(s)
+            der_deltas[0] = (deltas[1] - deltas[0])/(g_path[1] - g_path[0])
+            der_deltas[-1] = (deltas[-1] - deltas[-2])/(g_path[-1] - g_path[-2])
+            for i, g in enumerate(g_path):
+                if i !=0 and i != len(g_path) - 1:
+                    der_deltas[i] = (deltas[i+1] - deltas[i-1])/(g_path[i+1] - g_path[i-1])
+    else: # taking derivative analytically
         s = np.shape(deltas)
         der_deltas = np.zeros(s)
-        der_deltas[0] = (deltas[1] - deltas[0])/(g_path[1] - g_path[0])
-        der_deltas[-1] = (deltas[-1] - deltas[-2])/(g_path[-1] - g_path[-2])
         for i, g in enumerate(g_path):
-            if i !=0 and i != len(g_path) - 1:
-                der_deltas[i] = (deltas[i+1] - deltas[i-1])/(g_path[i+1] - g_path[i-1])
+            der_deltas[i], _ = der_delta(deltas[i], L, N, Z, g, -1)
     l = len(g_path)
     # Now forming eigenvalues of IM and observables
     ioms = np.zeros((l, L))
@@ -237,7 +247,9 @@ def rgk_spectrum(L, t1, t2, start_neg=False):
         k = (1-r)*np.pi
     else:
         k = r*np.pi
-    epsilon = -0.5 * t1 * (np.cos(k) - 1) - 0.5 * t2 * (np.cos(2*k) -1)
+    # epsilon = -0.5 * t1 * (np.cos(k) - 1) - 0.5 * t2 * (np.cos(2*k) -1)
+    eta = np.sin(k/2)*np.sqrt(t1 + 4*t2*(np.cos(k/2)**2))
+    epsilon = eta**2
     return k, epsilon
 
 
@@ -247,7 +259,7 @@ if __name__ == '__main__':
     L = int(sys.argv[1])
     N = int(sys.argv[2])
     g_step = float(sys.argv[3])
-    G = 1.5/(L-2*N+1)
+    G = 1.1/(L-2*N+1)
     # G = 2.0/(1-N+L/2)
     k, epsilon_rgk = rgk_spectrum(L, 1, 0)
     # epsilon = k**2
@@ -257,7 +269,7 @@ if __name__ == '__main__':
     # E, n, Delta, Gs = compute_hyperbolic_energy(L, N, G, epsilon, g_step)
     # plt.scatter(Gs, E, s=8)
     E2, n2, Delta2, G2, Z = compute_hyperbolic_energy(L, N, G, epsilon, g_step,
-            start=0.4)
+            start=0.9, use_fd=False)
     plt.scatter(G2, E2, s=2)
     plt.axvline(1./(L-2*N+1), color='g')
     # plt.axvline(2./(L-2*N+1), color='m')
@@ -278,6 +290,7 @@ if __name__ == '__main__':
     plt.scatter(G2, nsN, s=2)
     plt.scatter(G2, nsN1, s=2)
     plt.axvline(1./(L-2*N+1), color = 'g')
+    plt.axvline(1./(L-N+1), color = 'r')
     # plt.axvline(-2./(N-1), color = 'y')
     # plt.axvline(2./(L-2*N+1), color = 'm')
     plt.ylim(0, 1)

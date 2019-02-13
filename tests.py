@@ -1,67 +1,93 @@
-# from celluloid import Camera
+from celluloid import Camera
 from solve_rg_model import rgk_spectrum, delta_relations
 from solve_rg_model import compute_hyperbolic_energy
 import numpy as np
-# import matplotlib.pyplot as plt
+import matplotlib.pyplot as plt
 import sys
-# from xxy_richardson_gaudin_bethe import bethe
-# import exact_diag as ed
+from xxy_richardson_gaudin_bethe import bethe
+import exact_diag as ed
+import time
 
+np.set_printoptions(precision=20)
 
 def compare_bethe():
     # doing 3 way test with bethe ansatz and exact diagonalization
     L = int(sys.argv[1])
     N = int(sys.argv[2])
     k, epsilon = rgk_spectrum(L, 1, 0, start_neg=False)
-    print(k)
-    print(epsilon)
 
-    G = 0.5/(L-N+1)
+    G =float(sys.argv[3])/(L-2*N+1)
+    # G = 1.4/(L-N+1)
     print(G)
-    # Grg = 1./(L-2*N+1)
-    # G = 1.2*Grg
-    qenergies, qn, deltas, Ges, Z = compute_hyperbolic_energy(L, N, G, epsilon, .01/L)
-    print('Z is:')
-    for r in Z:
-        print(r)
+    qenergies, qn, deltas, Ges, Z = compute_hyperbolic_energy(L, N, G, epsilon, .1/L)
     print('Deltas are:')
     print(deltas[-1])
     # imscale = 10**-6
-    imscale=10**-3
-    dg = 10**-3
-    re, ie, rp, ip, er = bethe.compute_energy(L, N, G, epsilon, imscale=imscale, dg=dg)
+    # imscale=5*10**-3
+    # dg = 10**-3
+    # imscale = 0.1
+    # imscale = .1
+    # imscale = .01
+    imscale = 1./L
+    # dg = 10**-3
+    dg=.1/L
+    re, ie, rp, ip, er = bethe.compute_energy(L, N, G, epsilon,
+                                              imscale=imscale, dg=dg)
+    print(dg)
     print('Real pairs of pairons:')
     print(rp)
     print('Im parts of pairons:')
     print(ip)
-
-    # Gs = Ges
-    # l = len(Gs)
-    # benergies = np.zeros(l)
-    # denergies = np.zeros(l)
-    # for i, Gi in enumerate(Gs):
-        # print('G = {}'.format(Gi))
-        # imscale = 10**-8
-        # re, ie, rp, ip, er = bethe.compute_energy(L, N, Gi, epsilon, imscale=imscale, dg=0.01/L, hold=0)
-        # if er > 10**-14:
-            # print('Error bad! running again')
-            # re, ie, rp, ip, er = bethe.compute_energy(L, N, Gi, epsilon, imscale=imscale, dg=0.001/L, hold=0)
-        # H = ed.form_hyperbolic_hamiltonian(L, N, Gi, epsilon)
-        # if np.abs(re) < 1000:
-            # benergies[i] = re
+    Gs = Ges
+    l = len(Gs)
+    Gmr = 1./(L-N+1)
+    print('Gmr = {}'.format(Gmr))
+    print('')
+    benergies = np.zeros(l)
+    denergies = np.zeros(l)
+    for i, Gi in enumerate(Gs):
+        print('G = {}'.format(Gi))
+        # if 0.9*Gmr < Gi <= Gmr:
+            # print('Close: gonna use smaller imscale and steps')
+            # # imscale = 10**-4
+            # imscale = 1
+            # dg = 10**-4
+        # elif Gmr < Gi < 1.1*Gmr:
+            # print('Close and above')
+            # # imscale = 10**-3
+            # imscale=1
+            # dg = 10**-4
         # else:
-            # benergies[i] = np.nan
-        # denergies[i] = np.min(H.eigvalsh())
-    # ints = []
-    # print('pairons: ')
-    # print([rp[i] + 1j*ip[i] for i in range(len(rp))])
-    # plt.figure(figsize=(12, 8))
-    # plt.plot(Gs, denergies, label = 'diag')
-    # plt.scatter(Ges, qenergies, label = 'quad')
-    # plt.scatter(Gs, benergies, label = 'rg', s=8)
-    # plt.legend()
-    # plt.show()
+            # imscale = 5*10**-3
+            # dg = 10**-3
+        print(dg)
+        re, ie, rp, ip, er = bethe.compute_energy(L, N, Gi, epsilon,
+                        imscale=imscale, dg=dg, hold=0.4)
+        if np.abs(re) <= 10**5:
+            benergies[i] = re
+        else:
+            benergies[i] = np.nan
+        H = ed.form_hyperbolic_hamiltonian(L, N, Gi, epsilon)
+        denergies[i] = np.min(H.eigvalsh())
+        print('Pairons:')
+        print(rp + 1j*ip)
+        print('')
+    plt.figure(figsize=(12, 8))
+    plt.subplot(2,1,1)
+    plt.scatter(Ges, qenergies, label = 'quad', marker = '1')
+    # plt.scatter(Gs, benergies, label = 'rg', marker = 'x')
+    plt.scatter(Gs, denergies, label = 'diag', marker = 'o', s=4,
+                color='r')
+    # plt.axvline(1./(L-N+1))
+    # plt.axvline(1./(L-2*N+1))
+    # plt.ylim(-10, 50)
+    plt.legend()
 
+    plt.subplot(2,1,2)
+    plt.scatter(Gs, qenergies - denergies, marker='1', label='quad-diag')
+    plt.scatter(Gs, benergies - denergies, marker='x', label='bethe-diag')
+    plt.ylim(-2*10**-12, 2*10**-12)
+    plt.legend()
 
 
 
@@ -75,7 +101,7 @@ def test_rgk():
     G = 3.0/L
     g_step = .01/L
     energies, nsk, deltas, Gs, Z = compute_hyperbolic_energy(L, N, G, epsilon, g_step)
-    energies = 8*energies - 2*N 
+    energies = 8*energies - 2*N
     e0 = energies/L
     e1 = np.gradient(e0, Gs*L)
     e2 = np.gradient(e1, Gs*L)
@@ -172,9 +198,12 @@ def examine_deltas():
     plt.axhline(1, ls=':')
     plt.axhline(0, ls=':')
     # plt.ylim(-0.5, 1.5)
-    plt.show()
 
 if __name__ == '__main__':
+    start = time.time()
     # examine_deltas()
-    # compare_bethe()
-    test_rgk()
+    compare_bethe()
+    finish = time.time()
+    print('Seconds elapsed: {}'.format(finish-start))
+    plt.show()
+    # test_rgk()
