@@ -4,8 +4,6 @@ import numpy as np
 import time
 import sys
 import pandas as pd
-np.set_printoptions(precision=20)
-
 
 def test_rgk():
     L = 2048
@@ -19,12 +17,16 @@ def test_rgk():
         g_step = 0.1/L
     energies, nsk, deltas, Gs, Z = compute_hyperbolic_energy(L, N, G, epsilon, g_step)
     energies = 8*energies - 2*N
-    e0 = energies/L
-    e1 = np.gradient(e0, Gs*L)
-    e2 = np.gradient(e1, Gs*L)
-    e3 = np.gradient(e2, Gs*L)
-    df = pd.DataFrame({'g=GL': Gs*L, 'E': energies, 'dE/dg': e1, 'd2E': e2, 'd3E': e3})
-    df.to_csv('results/rgk_energies.csv')
+
+    df = pd.DataFrame({'G': Gs, 'E': energies})
+    df.to_csv('results/rgk_energies_{}.csv'.format(g_step))
+    Ns = pd.DataFrame({'k': k, 'epsilon': epsilon}, index = k)
+    Deltas = pd.DataFrame({'k': k, 'epsilon': epsilon}, index = k)
+    for i, G in enumerate(Gs):
+        Ns['G'] = nsk[i]
+        Deltas['G'] = deltas[i]
+    Ns.to_csv('results/rgk_ns_{}.csv'.format(g_step))
+    Deltas.to_csv('results/rgk_deltas_{}.csv'.format(g_step))
 
 if __name__ == '__main__':
     start = time.time()
