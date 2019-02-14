@@ -177,7 +177,7 @@ def compute_hyperbolic_deltas(L, N, G, epsilon, g_step, skip_Grg=False,
             G_path = np.append(np.arange(0, G, g_step), G)
             g_path = -G_path/(1+G_path*(N-L/2-1))
             g_path = g_path[1:]
-            print(g_path)
+            # print(g_path)
         else:
             g_path = make_g_path(g_final, g_step)
             g_path = g_path[1:] # don't need to start at 0

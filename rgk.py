@@ -15,10 +15,11 @@ def test_rgk():
         g_step = float(sys.argv[1])/L
     else:
         g_step = 0.1/L
+    print('Parameters: {} {} {}'.format(L, N, g_step))
     l = L/2
     n = N/2
     energies, nsk, deltas, Gs, Z = compute_hyperbolic_energy(L, N, G, epsilon, g_step)
-    energies = 8*energies - 2*N
+    energies = 8*energies - 2*(N-L/2)
 
     df = pd.DataFrame({'G': Gs, 'E': energies})
     df.to_csv('results/rgk_energies_{}.csv'.format(g_step))

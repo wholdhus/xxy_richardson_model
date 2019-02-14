@@ -95,28 +95,32 @@ def test_rgk():
     import pandas as pd
     L = 2048
     N = 512
-    k, rgke = rgk_spectrum(L, 1, 0, start_neg=True)
+    k, rgke = rgk_spectrum(L, 1, 0, peri=False)
     epsilon = rgke
     l = int(L/2)
     n = int(N/2)
     # G = 3.0/L
     G = 1.5/(l-2*n+1)
-    g_step = .1/L
+    g_step = .5/L
     energies, nsk, deltas, Gs, Z = compute_hyperbolic_energy(l, n, G, epsilon, g_step)
     energies = 8*energies - 2*N
-    e0 = energies/L
-    e1 = np.gradient(e0, Gs*L)
-    e2 = np.gradient(e1, Gs*L)
-    e3 = np.gradient(e2, Gs*L)
+    gs = Gs*l
+    e0 = energies/l
+    e1 = np.gradient(e0, Gs*l)
+    e2 = np.gradient(e1, Gs*l)
+    e3 = np.gradient(e2, Gs*l)
     df = pd.DataFrame({'g=GL': Gs*L, 'E': energies, 'dE/dg': e1, 'd2E': e2, 'd3E': e3})
     df.to_csv('results/rgk_energies.csv')
     fig = plt.figure(figsize=(12,8))
     plt.subplot(3,1,1)
-    plt.scatter(Gs*L, e2)
+    plt.scatter(gs, e2)
+    plt.ylim(1.7,2.3)
     plt.subplot(3,1,2)
-    plt.scatter(Gs*L, e3)
+    plt.scatter(gs, e3)
+    plt.ylim(1.7,2.3)
     plt.subplot(3,1,3)
-    plt.scatter(Gs*L, e0)
+    plt.scatter(gs, e0)
+    plt.ylim(1.7,2.3)
     plt.show()
 
 
@@ -126,7 +130,7 @@ def examine_deltas():
     # N = int(0.75*L)
     Grg = 1./(L-2*N+1)
     Gp = -1./(N-L/2-1)
-    k, rgke = rgk_spectrum(L, 1, 0, start_neg=False)
+    k, rgke = rgk_spectrum(L, 1, 0, peri=False)
     if sys.argv[3] == 'rgk':
         epsilon = rgke
         spectrum = 'rgk'
