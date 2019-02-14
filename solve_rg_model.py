@@ -241,15 +241,29 @@ def compute_hyperbolic_energy(L, N, G, epsilon, g_step, skip_Grg=False,
     return energies, nsk, deltas, G_path, Z
 
 
-def rgk_spectrum(L, t1, t2, start_neg=False):
+def rgk_spectrum(L, t1, t2, start_neg=True):
     r = np.array([(i+1.0)/L for i in range(L)], dtype=np.float64)
-    if start_neg:
-        k = (1-r)*np.pi
-    else:
-        k = r*np.pi
-    # epsilon = -0.5 * t1 * (np.cos(k) - 1) - 0.5 * t2 * (np.cos(2*k) -1)
+    if not start_neg:
+        k1 = np.append(
+                    np.array([2*(i+1)*np.pi/L for i in range(int(L/2-1))],
+                    np.float64), 0)
+        k2 = np.append(
+                    np.array([-2*(i+1)*np.pi/L for i in range(int(L/2-1))],
+                    np.float64), -np.pi)
+        k = np.sort(np.concatenate((k2,k1)))
+    else: # antiperiodic bc
+        k1 = np.array(
+                [(2*i+1)*np.pi/L for i in range(int(L/2))],
+                np.float64)
+        k2 = np.array(
+                [-(2*i+1)*np.pi/L for i in range(int(L/2))],
+                np.float64)
+        k = np.sort(np.concatenate((k2, k1)))
+    print(k)
+
     eta = np.sin(k/2)*np.sqrt(t1 + 4*t2*(np.cos(k/2)**2))
     epsilon = eta**2
+    print(epsilon)
     return k, epsilon
 
 

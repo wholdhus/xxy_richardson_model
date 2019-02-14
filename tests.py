@@ -93,12 +93,14 @@ def compare_bethe():
 
 def test_rgk():
     import pandas as pd
-    L = 2048
-    N = 512
+    L = 200
+    N = 50
+    # L = 2048
+    # N = 512
     k, rgke = rgk_spectrum(L, 1, 0, start_neg=True)
-    plt.scatter(k, rgke)
     epsilon = rgke
-    G = 3.0/L
+    # G = 3.0/L
+    G = 1.5/(L-2*N+1)
     g_step = .01/L
     energies, nsk, deltas, Gs, Z = compute_hyperbolic_energy(L, N, G, epsilon, g_step)
     energies = 8*energies - 2*N
@@ -108,14 +110,14 @@ def test_rgk():
     e3 = np.gradient(e2, Gs*L)
     df = pd.DataFrame({'g=GL': Gs*L, 'E': energies, 'dE/dg': e1, 'd2E': e2, 'd3E': e3})
     df.to_csv('results/rgk_energies.csv')
-    # fig = plt.figure(figsize=(12,8))
-    # plt.subplot(3,1,1)
-    # plt.scatter(Gs*L, e2)
-    # plt.subplot(3,1,2)
-    # plt.scatter(Gs*L, e3)
-    # plt.subplot(3,1,3)
-    # plt.scatter(Gs*L, e0)
-    # plt.show()
+    fig = plt.figure(figsize=(12,8))
+    plt.subplot(3,1,1)
+    plt.scatter(Gs*L, e2)
+    plt.subplot(3,1,2)
+    plt.scatter(Gs*L, e3)
+    plt.subplot(3,1,3)
+    plt.scatter(Gs*L, e0)
+    plt.show()
 
 
 def examine_deltas():
@@ -202,8 +204,8 @@ def examine_deltas():
 if __name__ == '__main__':
     start = time.time()
     # examine_deltas()
-    compare_bethe()
+    # compare_bethe()
+    test_rgk()
     finish = time.time()
     print('Seconds elapsed: {}'.format(finish-start))
     plt.show()
-    # test_rgk()
