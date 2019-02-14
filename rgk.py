@@ -5,7 +5,7 @@ import time
 import sys
 import pandas as pd
 
-def test_rgk():
+def do_rgk():
     L = 2048
     N = 512
     k, rgke = rgk_spectrum(L, 1, 0, peri=False)
@@ -18,7 +18,7 @@ def test_rgk():
     print('Parameters: {} {} {}'.format(L, N, g_step))
     l = L/2
     n = N/2
-    energies, nsk, deltas, Gs, Z = compute_hyperbolic_energy(L, N, G, epsilon, g_step)
+    energies, nsk, deltas, Gs, Z = compute_hyperbolic_energy(l, n, G, epsilon, g_step)
     energies = 8*energies - 2*(N-L/2)
 
     df = pd.DataFrame({'G': Gs, 'E': energies})
