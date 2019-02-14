@@ -91,17 +91,14 @@ def compare_bethe():
 
 
 
-def test_rgk():
+def test_rgk(L, N, g_step):
     import pandas as pd
-    L = 2048
-    N = 512
     k, rgke = rgk_spectrum(L, 1, 0, peri=False)
     epsilon = rgke
     l = int(L/2)
     n = int(N/2)
     # G = 3.0/L
     G = 1.5/(l-2*n+1)
-    g_step = .5/L
     energies, nsk, deltas, Gs, Z = compute_hyperbolic_energy(l, n, G, epsilon, g_step)
     energies = 8*energies - 2*N
     gs = Gs*l
@@ -114,13 +111,13 @@ def test_rgk():
     fig = plt.figure(figsize=(12,8))
     plt.subplot(3,1,1)
     plt.scatter(gs, e2)
-    plt.ylim(1.7,2.3)
+    plt.xlim(1.7,2.3)
     plt.subplot(3,1,2)
     plt.scatter(gs, e3)
-    plt.ylim(1.7,2.3)
+    plt.xlim(1.7,2.3)
     plt.subplot(3,1,3)
     plt.scatter(gs, e0)
-    plt.ylim(1.7,2.3)
+    plt.xlim(1.7,2.3)
     plt.show()
 
 
@@ -208,8 +205,7 @@ def examine_deltas():
 if __name__ == '__main__':
     start = time.time()
     # examine_deltas()
-    # compare_bethe()
-    test_rgk()
+    compare_bethe()
     finish = time.time()
     print('Seconds elapsed: {}'.format(finish-start))
     plt.show()
