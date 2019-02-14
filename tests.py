@@ -103,22 +103,23 @@ def test_rgk(L, N, g_step):
     energies = 8*energies - 2*N
     gs = Gs*l
     e0 = energies/l
-    e1 = np.gradient(e0, Gs*l)
-    e2 = np.gradient(e1, Gs*l)
-    e3 = np.gradient(e2, Gs*l)
-    df = pd.DataFrame({'g=GL': Gs*L, 'E': energies, 'dE/dg': e1, 'd2E': e2, 'd3E': e3})
+    # e1 = np.gradient(e0, Gs*l)
+    # e2 = np.gradient(e1, Gs*l)
+    # e3 = np.gradient(e2, Gs*l)
+    # df = pd.DataFrame({'g=GL': Gs*L, 'E': energies, 'dE/dg': e1, 'd2E': e2, 'd3E': e3})
+    df = pd.DataFrame({'G': Gs, 'E': energies})
     df.to_csv('results/rgk_energies.csv')
-    fig = plt.figure(figsize=(12,8))
-    plt.subplot(3,1,1)
-    plt.scatter(gs, e2)
-    plt.xlim(1.7,2.3)
-    plt.subplot(3,1,2)
-    plt.scatter(gs, e3)
-    plt.xlim(1.7,2.3)
-    plt.subplot(3,1,3)
-    plt.scatter(gs, e0)
-    plt.xlim(1.7,2.3)
-    plt.show()
+    # fig = plt.figure(figsize=(12,8))
+    # plt.subplot(3,1,1)
+    # plt.scatter(gs, e2)
+    # plt.xlim(1.7,2.3)
+    # plt.subplot(3,1,2)
+    # plt.scatter(gs, e3)
+    # plt.xlim(1.7,2.3)
+    # plt.subplot(3,1,3)
+    # plt.scatter(gs, e0)
+    # plt.xlim(1.7,2.3)
+    # plt.show()
 
 
 def examine_deltas():
