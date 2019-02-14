@@ -8,13 +8,15 @@ import pandas as pd
 def test_rgk():
     L = 2048
     N = 512
-    k, rgke = rgk_spectrum(L, 1, 0, start_neg=True)
+    k, rgke = rgk_spectrum(L, 1, 0, peri=False)
     epsilon = rgke
     G = 3.0/L
     if len(sys.argv) > 1:
         g_step = float(sys.argv[1])/L
     else:
         g_step = 0.1/L
+    l = L/2
+    n = N/2
     energies, nsk, deltas, Gs, Z = compute_hyperbolic_energy(L, N, G, epsilon, g_step)
     energies = 8*energies - 2*N
 

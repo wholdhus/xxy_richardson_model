@@ -14,7 +14,7 @@ def compare_bethe():
     # doing 3 way test with bethe ansatz and exact diagonalization
     L = int(sys.argv[1])
     N = int(sys.argv[2])
-    k, epsilon = rgk_spectrum(L, 1, 0, start_neg=False)
+    k, epsilon = rgk_spectrum(L, 1, 0, peri=False)
 
     G =float(sys.argv[3])/(L-2*N+1)
     # G = 1.4/(L-N+1)
@@ -93,16 +93,16 @@ def compare_bethe():
 
 def test_rgk():
     import pandas as pd
-    L = 200
-    N = 50
-    # L = 2048
-    # N = 512
+    L = 2048
+    N = 512
     k, rgke = rgk_spectrum(L, 1, 0, start_neg=True)
     epsilon = rgke
+    l = int(L/2)
+    n = int(N/2)
     # G = 3.0/L
-    G = 1.5/(L-2*N+1)
-    g_step = .01/L
-    energies, nsk, deltas, Gs, Z = compute_hyperbolic_energy(L, N, G, epsilon, g_step)
+    G = 1.5/(l-2*n+1)
+    g_step = .1/L
+    energies, nsk, deltas, Gs, Z = compute_hyperbolic_energy(l, n, G, epsilon, g_step)
     energies = 8*energies - 2*N
     e0 = energies/L
     e1 = np.gradient(e0, Gs*L)

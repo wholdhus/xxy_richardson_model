@@ -5,4 +5,4 @@
 #PBS -m abe
 #PBS -N RGKLong
 #PBS -j oe
-python rgk.py 0.01
+python rgk.py 0.1
