@@ -112,6 +112,7 @@ def use_g_inv(L, N, G, Z, g_step, start=0.9):
                               g_step), -G)
         g_path_3 = -G_path_3/(1+G_path_3*(N-L/2-1))
         g_path = np.concatenate((g_path, g_path_3))
+        l = l + len(g_path_3)
 
     deltas = np.zeros((l,L), np.float64)
     deltas[0][:N] = -2 # assuming these have lowest epsilon

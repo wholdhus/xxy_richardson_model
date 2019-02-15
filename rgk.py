@@ -22,14 +22,14 @@ def do_rgk():
     energies = 8*energies - 2*(N-L/2)
 
     df = pd.DataFrame({'G': Gs, 'E': energies})
-    df.to_csv('results/rgk_energies_{}_{}.csv'.format(G, np.round(g_step, 2)))
+    df.to_csv('RgkResults/rgk_energies_{}_{}.csv'.format(G, np.round(g_step, 2)))
     Ns = pd.DataFrame({'k': k, 'epsilon': epsilon}, index = k)
     Deltas = pd.DataFrame({'k': k, 'epsilon': epsilon}, index = k)
     for i, G in enumerate(Gs):
         Ns['G'] = nsk[i]
         Deltas['G'] = deltas[i]
-    Ns.to_csv('results/rgk_ns_{}_{}.csv'.format(G, np.round(g_step, 2)))
-    Deltas.to_csv('results/rgk_deltas_{}_{}.csv'.format(G, np.round(g_step, 2)))
+    Ns.to_csv('RgkResults/rgk_ns_{}_{}.csv'.format(G, np.round(g_step, 2)))
+    Deltas.to_csv('RgkResults/rgk_deltas_{}_{}.csv'.format(G, np.round(g_step, 2)))
 
 if __name__ == '__main__':
     start = time.time()

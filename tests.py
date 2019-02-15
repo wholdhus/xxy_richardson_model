@@ -10,29 +10,25 @@ import time
 
 np.set_printoptions(precision=20)
 
-def compare_bethe():
+def compare_bethe(diag=False):
     # doing 3 way test with bethe ansatz and exact diagonalization
     L = int(sys.argv[1])
     N = int(sys.argv[2])
-    k, epsilon = rgk_spectrum(L, 1, 0, peri=False)
-
+    k, epsilon = rgk_spectrum(2*L, 1, 0, peri=False)
+    print(epsilon)
     G =float(sys.argv[3])/(L-2*N+1)
     # G = 1.4/(L-N+1)
     print(G)
     qenergies, qn, deltas, Ges, Z = compute_hyperbolic_energy(L, N, G, epsilon, .1/L)
     print('Deltas are:')
     print(deltas[-1])
-    # imscale = 10**-6
-    # imscale=5*10**-3
-    # dg = 10**-3
-    # imscale = 0.1
-    # imscale = .1
-    # imscale = .01
-    imscale = 1./L
-    # dg = 10**-3
-    dg=.1/L
+    imscale = .1/L
+    # dg=.001/L
+    dg = .01/L
+    imscale2 = .1/L
     re, ie, rp, ip, er = bethe.compute_energy(L, N, G, epsilon,
-                                              imscale=imscale, dg=dg)
+                                              imscale=imscale, dg=dg,
+                                              imscale2=imscale2)
     print(dg)
     print('Real pairs of pairons:')
     print(rp)
@@ -45,49 +41,84 @@ def compare_bethe():
     print('')
     benergies = np.zeros(l)
     denergies = np.zeros(l)
+    steps = len(Gs)
+    reps = np.zeros((steps, N), np.float64)
+    imps = np.zeros((steps, N), np.float64)
     for i, Gi in enumerate(Gs):
         print('G = {}'.format(Gi))
-        # if 0.9*Gmr < Gi <= Gmr:
-            # print('Close: gonna use smaller imscale and steps')
-            # # imscale = 10**-4
-            # imscale = 1
-            # dg = 10**-4
-        # elif Gmr < Gi < 1.1*Gmr:
-            # print('Close and above')
-            # # imscale = 10**-3
-            # imscale=1
-            # dg = 10**-4
-        # else:
-            # imscale = 5*10**-3
-            # dg = 10**-3
-        print(dg)
-        re, ie, rp, ip, er = bethe.compute_energy(L, N, Gi, epsilon,
-                        imscale=imscale, dg=dg, hold=0.4)
+        re, ie, reps[i], imps[i], er = bethe.compute_energy(L, N, Gi, epsilon,
+                        imscale=imscale, dg=dg, hold=0.4,
+                        imscale2=imscale2)
         if np.abs(re) <= 10**5:
             benergies[i] = re
         else:
             benergies[i] = np.nan
-        H = ed.form_hyperbolic_hamiltonian(L, N, Gi, epsilon)
-        denergies[i] = np.min(H.eigvalsh())
         print('Pairons:')
-        print(rp + 1j*ip)
+        print(reps[i] + 1j*imps[i])
         print('')
+        if diag:
+            H = ed.form_hyperbolic_hamiltonian(L, N, Gi, epsilon)
+            denergies[i] = np.min(H.eigvalsh())
     plt.figure(figsize=(12, 8))
-    plt.subplot(2,1,1)
+    plt.subplot(2,2,1)
     plt.scatter(Ges, qenergies, label = 'quad', marker = '1')
-    # plt.scatter(Gs, benergies, label = 'rg', marker = 'x')
-    plt.scatter(Gs, denergies, label = 'diag', marker = 'o', s=4,
-                color='r')
-    # plt.axvline(1./(L-N+1))
-    # plt.axvline(1./(L-2*N+1))
-    # plt.ylim(-10, 50)
+    plt.scatter(Gs, benergies, label = 'rg', marker = 'x')
+    if diag:
+        plt.scatter(Gs, denergies, label = 'diag', marker = 'o', s=4,
+                    color='r')
+    Gmr = 1./(L-N+1)
+    Grg = 1./(L-2*N+1)
+    Gn = -2./(N-1)
+    if np.min(Gs) < Gmr < np.max(Gs):
+        plt.axvline(Gmr, color='r')
+    if np.min(Gs) < Grg < np.max(Gs):
+        plt.axvline(Grg, color = 'g')
+    if np.min(Gs) < Gn < np.max(Gs):
+        plt.axvline(Gn, color = 'c')
+    plt.ylim(0.8*np.min(qenergies), 1.2*np.max(qenergies))
     plt.legend()
 
-    plt.subplot(2,1,2)
-    plt.scatter(Gs, qenergies - denergies, marker='1', label='quad-diag')
-    plt.scatter(Gs, benergies - denergies, marker='x', label='bethe-diag')
-    plt.ylim(-2*10**-12, 2*10**-12)
+    plt.subplot(2,2,2)
+    if diag:
+        plt.scatter(Gs, qenergies - denergies, marker='1', label='quad-diag')
+        plt.scatter(Gs, benergies - denergies, marker='x', label='bethe-diag')
+    else:
+        plt.scatter(Gs, benergies - qenergies, label='bethe-quad')
+    plt.ylim(-1*10**-11, 1*10**-11)
+    if np.min(Gs) < Gmr < np.max(Gs):
+        plt.axvline(Gmr, color='r')
+    if np.min(Gs) < Grg < np.max(Gs):
+        plt.axvline(Grg, color = 'g')
+    if np.min(Gs) < Gn < np.max(Gs):
+        plt.axvline(Gn, color = 'c')
     plt.legend()
+
+    plt.subplot(2,2,3)
+    for j in range(N):
+        reals = [reps[s][j] for s in range(steps)]
+        plt.scatter(Gs, reals, s=4)
+    if np.min(Gs) < Gmr < np.max(Gs):
+        plt.axvline(Gmr, color='r')
+    if np.min(Gs) < Grg < np.max(Gs):
+        plt.axvline(Grg, color = 'g')
+    if np.min(Gs) < Gn < np.max(Gs):
+        plt.axvline(Gn, color = 'c')
+    plt.ylim(-1, 1)
+
+    plt.subplot(2,2,4)
+    for j in range(N):
+        ims = [imps[s][j] for s in range(steps)]
+        for i, im in enumerate(ims):
+            if np.abs(im) > 100:
+                ims[i] = np.nan
+        plt.scatter(Gs, ims, s=4)
+    if np.min(Gs) < Gmr < np.max(Gs):
+        plt.axvline(Gmr, color='r')
+    if np.min(Gs) < Grg < np.max(Gs):
+        plt.axvline(Grg, color = 'g')
+    if np.min(Gs) < Gn < np.max(Gs):
+        plt.axvline(Gn, color = 'c')
+    # plt.ylim(-1, 1)
 
 
 
