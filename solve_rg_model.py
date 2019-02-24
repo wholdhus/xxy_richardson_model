@@ -3,8 +3,7 @@ from scipy.linalg import solve, svdvals
 from scipy.optimize import root
 # from numba import njit
 
-
-# @njit()
+TOL = 10**-10
 def delta_relations(Delta, L, N, Z, g, Gamma):
     """Express the relations of the Delta parameters (Eqs 3 and 4).
 
@@ -81,63 +80,90 @@ def compute_particle_number(Delta, L, N, Z, g, Gamma):
 
 def make_g_path(gf, g_step):
     if gf < 0:
-        g_path = -np.append(np.arange(0, -gf, g_step), -gf)
+        g_path = -np.arange(0, -gf, g_step)
     else:
-        g_path = np.append(np.arange(0, gf, g_step), gf)
+        g_path = np.arange(0, gf, g_step)
+    # was running into issues where this was less than machine epsilon
+    if np.abs(g_path[-1] - gf) > 10 **-10:
+        g_path = np.append(g_path, gf)
+    else:
+        g_path[-1] = gf
     return g_path
 
 
+def get_slope(x1, x2, y1, y2):
+    return (y2 - y1)/(x2 - x1)
+
 def use_g_inv(L, N, G, Z, g_step, start=0.9):
     finish = 2 - start
-    # finish = 1.1
     Gamma = -1
     GP = 1./(1-N+L/2)
     lambd1 = 1/(1 + start*GP*(N - L/2 - 1))
     gf1 = -start*GP*lambd1
-    g_path_1 = make_g_path(gf1, g_step)[1:]
+    gp1 = make_g_path(gf1, g_step)[1:]
+    l1 = len(gp1)
     if G < finish*GP:
-        G_path_2 = -np.append(np.arange(-start*GP + g_step/10, -finish*GP,
-                              g_step/10), -finish*GP)
+        Gp2 = -np.append(np.arange(-start*GP + g_step*10**-4, -finish*GP,
+                              g_step/5), -finish*GP)
     else:
-        G_path_2 = -np.append(np.arange(-start*GP + g_step/10, -G,
-                              g_step/10),
-                              -G)
-    g_path_2 = -G_path_2/(1+G_path_2*(N-L/2-1))
-    ginv_path_2 = 1/g_path_2
+        Gp2 = -np.append(np.arange(-start*GP + g_step*10**-4, -G,
+                              g_step/5), -G)
+    gp2 = -Gp2/(1+Gp2*(N-L/2-1))
+    l2 = len(gp2)
+    gip2 = 1./gp2
     # number of steps we'll take
-    l = len(g_path_1) + len(ginv_path_2) + 1
-    g_path = np.concatenate((g_path_1, g_path_2))
+    l = l1 + l2 + 1
+    g_path = np.concatenate((gp1, gp2))
     if G < finish*GP: # still need to do the last bit
-        G_path_3 = -np.append(np.arange(-finish*GP + g_step/10, -G,
-                              g_step), -G)
-        g_path_3 = -G_path_3/(1+G_path_3*(N-L/2-1))
-        g_path = np.concatenate((g_path, g_path_3))
-        l = l + len(g_path_3)
-
+        Gp3 = -np.append(np.arange(-finish*GP + g_step/10, -G,
+                              g_step/5), -G)
+        gp3 = -Gp3/(1+Gp3*(N-L/2-1))
+        l3 = len(gp3)
+        g_path = np.concatenate((g_path, gp3))
+        l = l + l3
     deltas = np.zeros((l,L), np.float64)
+    lambdas = np.zeros((l2 + 1, L), np.float64)
     deltas[0][:N] = -2 # assuming these have lowest epsilon
 
     # Now we have our route!
 
-    for i, g in enumerate(g_path_1): # skipping 0
+    for i, g in enumerate(gp1):
         delta = deltas[i]
+        if i > 1: # tacking on Ddelta/Dg * Dg
+            d_g = g - gp1[i-1] # we need the next gap size, which sometimes is different
+            delta = delta + get_slope(gp1[i-2], gp1[i-1], deltas[i-1], delta)*d_g
         sol = root(delta_relations, delta, args=(L, N, Z, g, Gamma),
-                method='lm')
+                method='lm', options={'xtol':TOL})
         deltas[i+1] = sol.x
-    Lambda = deltas[len(g_path_1)-1]/g_path_1[-1]
+    # not adding a derivative correction because this step is Very Small
+    lambdas[0] = deltas[l1-1]/gp1[-1]
 
-    for i, g in enumerate(ginv_path_2):
-        j = i + len(g_path_1)
-        sol = root(lambda_relations, Lambda, args=(L, N, Z,
-                   g, Gamma), method='lm')
+    for i, g in enumerate(gip2):
+        j = i + l1
+        # something is bad about deriv corrections here
+        if i == 1: # needs special care
+            lambdas[i] = 0.9*lambdas[i] + 0.1*lambdas[i-1]
+        if i > 1:
+            d_g = g - gip2[i-1]
+            lambdas[i] = lambdas[i] + get_slope(gip2[i-2], gip2[i-1], lambdas[i-1], lambdas[i]) * d_g
+        sol = root(lambda_relations, lambdas[i], args=(L, N, Z, g, Gamma),
+                method='lm', options={'xtol':TOL})
         Lambda = sol.x
         deltas[j+1] = Lambda/g
+        if i+1 < l2:
+            lambdas[i+1] = Lambda
     if G < finish*GP:
-        for i, g in enumerate(g_path_3):
-            j = i + len(g_path_1) + len(ginv_path_2)
+        delta = deltas[l1+l2-1]
+        d_g = gp3[0] - gp2[-1]
+        delta = deltas[l1+l2-1] + get_slope(gp2[-2], gp2[-1], lambdas[l1+l2-2], lambdas[l1+l2-1]) * d_g
+        for i, g in enumerate(gp3):
+            j = i + l1 + l2
             delta = deltas[j]
-            sol = root(delta_relations, delta, args=(L, N, Z, g,
-                       Gamma), method= 'lm')
+            if i > 0: # tacking on Ddelta/Dg * Dg
+                d_g = g - g_path[j-1] # we need the next gap size, which sometimes is different
+                delta = delta + get_slope(g_path[j-2], g_path[j-1], deltas[j-1], delta) * d_g
+            sol = root(delta_relations, delta, args=(L, N, Z, g, Gamma),
+                    method='lm', options={'xtol':TOL})
             deltas[j+1] = sol.x
     return deltas, g_path
 
@@ -158,7 +184,6 @@ def compute_hyperbolic_deltas(L, N, G, epsilon, g_step, skip_Grg=False,
     Grg = 1./(L-2*N+1)
     lambd = 1/(1 + G*(N - L/2 - 1))
     g_final = -G*lambd
-    # print(g_final)
     if L != 2*N:
         grg = -Grg/(1+Grg*(N-L/2-1))
     else:
@@ -178,10 +203,10 @@ def compute_hyperbolic_deltas(L, N, G, epsilon, g_step, skip_Grg=False,
             G_path = np.append(np.arange(0, G, g_step), G)
             g_path = -G_path/(1+G_path*(N-L/2-1))
             g_path = g_path[1:]
-            # print(g_path)
         else:
             g_path = make_g_path(g_final, g_step)
             g_path = g_path[1:] # don't need to start at 0
+        G_path = -g_path/(1+g_path*(N-L/2-1))
         # Initial values for Delta with g small. The -2 values (initially
         # occupied states) go where the epsilons are smallest.
         deltas = np.zeros((len(g_path) + 1, L), np.float64)
@@ -191,20 +216,24 @@ def compute_hyperbolic_deltas(L, N, G, epsilon, g_step, skip_Grg=False,
         # Finding root while varying g, using prev. solution to start
         for i, g in enumerate(g_path):
             delta = deltas[i]
+            if i > 1:
+                d_g = g - g_path[i-1]
+                delta = delta + get_slope(g_path[i-2], g_path[i-1], deltas[i-1], delta) * d_g
             sol = root(delta_relations, delta, args=(L, N, Z, g, Gamma),
-                       method='lm')
+                    method='lm', options={'xtol':TOL})
             deltas[i+1] = sol.x
-    # checking if we satisfy the delta relations
-    dr = delta_relations(deltas[-1], L, N, Z, g_path[-1], Gamma)
-    if np.max(dr)> 10**-12:
-        print('WARNING: At G= {} error is {}'.format(
-              G, np.max(dr)))
+            # checking if we satisfy the delta relations
+            dr = delta_relations(deltas[i+1], L, N, Z, g_path[i], Gamma)
+            errors = np.abs(dr[:-1]/np.mean(np.abs(deltas[i+1])))
+            if np.max(errors)> 10**-10:
+                print('WARNING: At G= {} error is'.format(G_path[i]))
+                print(errors)
     g_path = np.concatenate(([0], g_path)) # removed 0 earlier
     return g_path, deltas, Z
 
 
 def compute_hyperbolic_energy(L, N, G, epsilon, g_step, skip_Grg=False,
-                              start=0.8, use_fd=True):
+                              start=0.9, use_fd=True):
     g_path, deltas, Z = compute_hyperbolic_deltas(L, N, G,
                                                   epsilon, g_step,
                                                   skip_Grg=skip_Grg,
@@ -235,14 +264,17 @@ def compute_hyperbolic_energy(L, N, G, epsilon, g_step, skip_Grg=False,
     G_path = -g_path/(1+g_path*(N-L/2-1))
     lambds = 1/(1 + G_path*(N - L/2 - 1))
     for i, g in enumerate(g_path):
+        print('last delta:')
+        print(deltas[i][-1])
         ioms[i] = -1./2 - deltas[i]/2 + g/4*np.sum(Z, axis=1)
+        # ioms[i][-1] = 2*ioms[i][-1] - ioms[i][-2]
         energies[i] = (1/lambds[i] * np.dot(epsilon, ioms[i])
-                       + np.sum(epsilon)*(1./2 - 3/4*G_path[i]))
+                + np.sum(epsilon)*(1./2 - 3/4*G_path[i]))
         nsk[i] = -0.5 * deltas[i] + 0.5*g*der_deltas[i]
     return energies, nsk, deltas, G_path, Z
 
 
-def rgk_spectrum(L, t1, t2, peri=False):
+def rgk_spectrum(L, t1, t2, peri=False, fix=False):
     r = np.array([(i+1.0)/L for i in range(L)], dtype=np.float64)
     if peri: # we actually need to handle this more carefully
         k1 = np.append(
@@ -264,6 +296,11 @@ def rgk_spectrum(L, t1, t2, peri=False):
         k = k1
     eta = np.sin(k/2)*np.sqrt(t1 + 4*t2*(np.cos(k/2)**2))
     epsilon = eta**2
+    if fix:
+        # l = int(L/20)
+        # epsilon[-l:] = epsilon[-l:] + (epsilon[-l:]**2 - epsilon[-l]**2)
+        # epsilon[-1] = 2*epsilon[-1]
+        epsilon[-1] = 0
     return k, epsilon
 
 
