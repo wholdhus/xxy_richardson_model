@@ -214,8 +214,8 @@ def compute_hyperbolic_deltas(L, N, G, epsilon, g_step,
         for i, g in enumerate(g_path):
             delta = deltas[i]
             if i > 1:
-                d_g = g - g_path[i-1]
-                delta = delta + get_slope(g_path[i-2], g_path[i-1], deltas[i-1], delta) * d_g
+                corr = get_dy(g_path, deltas, i-1, i)
+                delta = delta + corr
             sol = root(delta_relations, delta, args=(L, N, Z, g, Gamma),
                     method='lm', options={'xtol':TOL})
             deltas[i+1] = sol.x
