@@ -7,7 +7,8 @@ if len(sys.argv) == 5:
     L = int(sys.argv[1])
     N = int(sys.argv[2])
     g_step = float(sys.argv[3])/L
-    expo = float(sys.argv[4])
+    # expo = float(sys.argv[4])
+    spectrum = sys.argv[4]
 else:
     L = 20
     N = 13
@@ -15,7 +16,7 @@ else:
     expo=2
 
 print('Running with params L, N, steps = {}, {}, {}'.format(
-    L, N, g_step))
+    L, N, spectrum))
 l = int(L/2)
 n = int(N/2)
 Grg = 1./(l-2*n+1)
@@ -23,7 +24,9 @@ Grg = 1./(l-2*n+1)
 G = 3.*Grg
 
 k, epsilon = rgk_spectrum(L, 1, 0)
-epsilon = k**expo
+if spectrum != 'rgk':
+    expo = float(spectrum)
+    epsilon = k**expo
 
 energies, nsk, deltas, Gs, Z = compute_hyperbolic_energy(l, n, G, epsilon, g_step)
 

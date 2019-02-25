@@ -125,10 +125,8 @@ def examine_deltas():
     Grg = 1./(l-2*n+1)
     Gp = -1./(n-l/2-1)
     k, rgke = rgk_spectrum(L, 1, 0, peri=False, fix=False)
-    # rgke = k**2
     spectrum2 = 'RGK'
     if float(sys.argv[3]) == 0:
-        # _, epsilon = rgk_spectrum(L, 1, 0, peri=False, fix=True)
         epsilon = k**2 - (k**4)/(4*3*2)
         epsilon = epsilon/np.max(epsilon)
         spectrum = 'modified rgk'
@@ -138,14 +136,12 @@ def examine_deltas():
     else:
         epsilon = k**float(sys.argv[3])
         spectrum = 'k^{}'.format(sys.argv[3])
-    G = Grg * 2.5
+    G = Grg * 2.8
     print(G)
     g_step = 0.1/L
     if len(sys.argv) > 4:
         g_step = float(sys.argv[4])/L
-    
-    start=0.8
-
+    start=0.7
 
     print('Params: L, N, spectrum, g_step = {} {} {} {}'.format(L, N, spectrum, g_step))
 
@@ -217,12 +213,13 @@ def examine_deltas():
     plt.scatter(Gs, energies-energies[0], marker='+',
                 label = '{} spectrum'.format(spectrum),
                 color = 'c')
-    plt.scatter(Gs, energies_rgk - energies_rgk[0], marker='x', 
+    plt.scatter(Gs, energies_rgk - energies_rgk[0], marker='x',
                 label = '{} spectrum'.format(spectrum2),
                 color = 'm')
     plt.axvline(Grg)
     if G < Gp < 0 or G > Gp > 0:
-        plt.axvline(start*Gp, color = 'm')
+        plt.axvline(start*Gp, ls = ':')
+        plt.axvline((2-start)*Gp, ls = ':')
         plt.axvline(Gp, color='r')
     # plt.xlabel('G')
     plt.ylabel('E_0')

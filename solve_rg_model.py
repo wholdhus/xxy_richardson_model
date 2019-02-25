@@ -4,6 +4,8 @@ from scipy.optimize import root
 # from numba import njit
 
 TOL = 10**-10
+
+
 def delta_relations(Delta, L, N, Z, g, Gamma):
     """Express the relations of the Delta parameters (Eqs 3 and 4).
 
@@ -15,12 +17,13 @@ def delta_relations(Delta, L, N, Z, g, Gamma):
                 + g*np.sum(Z, axis=1)*Delta - g*np.dot(Z, Delta))
     # Eq 4.
     rels[L] = np.sum(Delta) + 2*N
-
     return rels
 
 
-
 def lambda_relations(Lambda, L, N, Z, ginv, Gamma):
+    """Same as delta_relations but for lambda = delta/g,
+    written in terms of ginv = g^-1
+    """
     rels = np.zeros(L+1, np.float64)
     ginv2 = ginv**2
     # Eq 3.
@@ -91,8 +94,12 @@ def make_g_path(gf, g_step):
     return g_path
 
 
-def get_slope(x1, x2, y1, y2):
-    return (y2 - y1)/(x2 - x1)
+def get_dy(xs, ys, xind, yind):
+    # computes dy = d/dx y * Delta x
+    dyHere = ys[yind] - ys[yind-1]
+    dxHere = xs[xind] - xs[xind-1]
+    dxNext = xs[xind+1] - xs[xind]
+    return dyHere*dxNext/dxHere
 
 def use_g_inv(L, N, G, Z, g_step, start=0.9):
     finish = 2 - start
@@ -103,10 +110,10 @@ def use_g_inv(L, N, G, Z, g_step, start=0.9):
     gp1 = make_g_path(gf1, g_step)[1:]
     l1 = len(gp1)
     if G < finish*GP:
-        Gp2 = -np.append(np.arange(-start*GP + g_step*10**-4, -finish*GP,
+        Gp2 = -np.append(np.arange(-start*GP + g_step*10**-8, -finish*GP,
                               g_step/5), -finish*GP)
     else:
-        Gp2 = -np.append(np.arange(-start*GP + g_step*10**-4, -G,
+        Gp2 = -np.append(np.arange(-start*GP + g_step*10**-8, -G,
                               g_step/5), -G)
     gp2 = -Gp2/(1+Gp2*(N-L/2-1))
     l2 = len(gp2)
@@ -130,8 +137,8 @@ def use_g_inv(L, N, G, Z, g_step, start=0.9):
     for i, g in enumerate(gp1):
         delta = deltas[i]
         if i > 1: # tacking on Ddelta/Dg * Dg
-            d_g = g - gp1[i-1] # we need the next gap size, which sometimes is different
-            delta = delta + get_slope(gp1[i-2], gp1[i-1], deltas[i-1], delta)*d_g
+            corr = get_dy(gp1, deltas, i-1, i)
+            delta = delta + corr
         sol = root(delta_relations, delta, args=(L, N, Z, g, Gamma),
                 method='lm', options={'xtol':TOL})
         deltas[i+1] = sol.x
@@ -141,34 +148,29 @@ def use_g_inv(L, N, G, Z, g_step, start=0.9):
     for i, g in enumerate(gip2):
         j = i + l1
         # something is bad about deriv corrections here
-        if i == 1: # needs special care
-            lambdas[i] = 0.9*lambdas[i] + 0.1*lambdas[i-1]
-        if i > 1:
-            d_g = g - gip2[i-1]
-            lambdas[i] = lambdas[i] + get_slope(gip2[i-2], gip2[i-1], lambdas[i-1], lambdas[i]) * d_g
+        if i > 0:
+            corr = get_dy(1./g_path, lambdas, j-1, i)
         sol = root(lambda_relations, lambdas[i], args=(L, N, Z, g, Gamma),
                 method='lm', options={'xtol':TOL})
         Lambda = sol.x
-        deltas[j+1] = Lambda/g
+        deltas[j+1] = Lambda/g # remember g here is g^-1
         if i+1 < l2:
             lambdas[i+1] = Lambda
     if G < finish*GP:
         delta = deltas[l1+l2-1]
-        d_g = gp3[0] - gp2[-1]
-        delta = deltas[l1+l2-1] + get_slope(gp2[-2], gp2[-1], lambdas[l1+l2-2], lambdas[l1+l2-1]) * d_g
         for i, g in enumerate(gp3):
             j = i + l1 + l2
             delta = deltas[j]
             if i > 0: # tacking on Ddelta/Dg * Dg
-                d_g = g - g_path[j-1] # we need the next gap size, which sometimes is different
-                delta = delta + get_slope(g_path[j-2], g_path[j-1], deltas[j-1], delta) * d_g
+                corr = get_dy(g_path, deltas, j-1, j)
+                delta = delta + corr
             sol = root(delta_relations, delta, args=(L, N, Z, g, Gamma),
                     method='lm', options={'xtol':TOL})
             deltas[j+1] = sol.x
     return deltas, g_path
 
 
-def compute_hyperbolic_deltas(L, N, G, epsilon, g_step, skip_Grg=False,
+def compute_hyperbolic_deltas(L, N, G, epsilon, g_step,
                               start=0.9):
     Gamma = -1 # hyperbolic case
     # Compute Z matrix.
@@ -194,12 +196,7 @@ def compute_hyperbolic_deltas(L, N, G, epsilon, g_step, skip_Grg=False,
     elif G > start*Gp > 0: # need to do similar trixkcx
         print('This is not going to work right now. Woops')
     else:
-        if skip_Grg and G < Grg < 0:
-            g_path_1 = make_g_path(0.95*grg, g_step)
-            g_path_2 = np.append(np.arange(1.005*grg, g_final, g_step),
-                                 g_final)
-            g_path = np.concatenate((g_path_1, g_path_2))[1:]
-        elif G > 0:
+        if G > 0:
             G_path = np.append(np.arange(0, G, g_step), G)
             g_path = -G_path/(1+G_path*(N-L/2-1))
             g_path = g_path[1:]
@@ -232,11 +229,10 @@ def compute_hyperbolic_deltas(L, N, G, epsilon, g_step, skip_Grg=False,
     return g_path, deltas, Z
 
 
-def compute_hyperbolic_energy(L, N, G, epsilon, g_step, skip_Grg=False,
+def compute_hyperbolic_energy(L, N, G, epsilon, g_step,
                               start=0.9, use_fd=True):
     g_path, deltas, Z = compute_hyperbolic_deltas(L, N, G,
                                                   epsilon, g_step,
-                                                  skip_Grg=skip_Grg,
                                                   start=start)
     if use_fd:
         # taking derivatives via finite difference
