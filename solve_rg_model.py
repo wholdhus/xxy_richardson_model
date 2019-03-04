@@ -107,7 +107,7 @@ def use_g_inv(L, N, G, Z, g_step, start=0.9):
     GP = 1./(1-N+L/2)
     lambd1 = 1/(1 + start*GP*(N - L/2 - 1))
     gf1 = -start*GP*lambd1
-    gp1 = make_g_path(gf1, g_step)[1:]
+    gp1 = make_g_path(gf1, g_step)
     l1 = len(gp1)
     if G < finish*GP:
         Gp2 = -np.append(np.arange(-start*GP + g_step/10, -finish*GP,
@@ -119,7 +119,7 @@ def use_g_inv(L, N, G, Z, g_step, start=0.9):
     l2 = len(gp2)
     gip2 = 1./gp2
     # number of steps we'll take
-    l = l1 + l2 + 1
+    l = l1 + l2
     g_path = np.concatenate((gp1, gp2))
     if G < finish*GP: # still need to do the last bit
         Gp3 = -np.append(np.arange(-finish*GP + g_step/10, -G,
@@ -129,43 +129,33 @@ def use_g_inv(L, N, G, Z, g_step, start=0.9):
         g_path = np.concatenate((g_path, gp3))
         l = l + l3
     deltas = np.zeros((l,L), np.float64)
-    # lambdas = np.zeros((l2 + 1, L), np.float64)
     deltas[0][:N] = -2 # assuming these have lowest epsilon
 
     # Now we have our route!
 
-    for i, g in enumerate(gp1):
+    for i, g in enumerate(gp1[1:]): # we already have the g=0 solution
         delta = deltas[i]
         if i > 1: # tacking on Ddelta/Dg * Dg
-            corr = get_dy(gp1, deltas, i-1, i)
+            corr = (deltas[i] - deltas[i-1])*(gp1[i+1] - gp1[i])/(gp1[i] - gp1[i-1])
             delta = delta + corr
         sol = root(delta_relations, delta, args=(L, N, Z, g, Gamma),
                 method='lm', options={'xtol':TOL})
         deltas[i+1] = sol.x
 
-    for i, g in enumerate(gip2):
-        j = i + l1
-        # something is bad about deriv corrections here, maybe this works?
-        # if i == 0 or i == 1:
-            # corr = (deltas[j]/g_path[j-1] - deltas[j-1]/g_path[j-2])*(1./g_path[j] - 1./g_path[j-1])/(
-                   # 1./g_path[j-1] - 1./g_path[j-2])
-            # Lambda = deltas[j]/g_path[j-1] + corr
-        # else: # need to use g^-1 in case g gets too big
-            # corr = (deltas[j]*gip2[i-1] - deltas[j-1]*gip2[i-2])*(gip2[i] - gip2[i-1])/(
-                    # gip2[i-1] - gip2[i-2])
-            # Lambda = deltas[j]*gip2[i-1] + corr
+    for i, gi in enumerate(gip2):
+        j = i + l1 - 1
         if i != 0:
             Lambda = deltas[j] * gip2[i-1]
         else:
-            Lambda = deltas[j] / g_path[j-1]
-        sol = root(lambda_relations, Lambda, args=(L, N, Z, g, Gamma),
+            Lambda = deltas[j] / gp1[-1]
+        sol = root(lambda_relations, Lambda, args=(L, N, Z, gi, Gamma),
                 method='lm', options={'xtol':TOL})
-        Lambda = sol.x
-        deltas[j+1] = Lambda/g # remember g here is g^-1
+        deltas[j+1] = sol.x*g_path[j+1]
+
+
     if G < finish*GP:
-        delta = deltas[l1+l2-1]
         for i, g in enumerate(gp3):
-            j = i + l1 + l2
+            j = i + l1 + l2 - 1
             delta = deltas[j]
             corr = get_dy(g_path, deltas, j-1, j)
             delta = delta + corr
