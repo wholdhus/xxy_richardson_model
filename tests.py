@@ -1,6 +1,7 @@
 from celluloid import Camera
 from solve_rg_model import rgk_spectrum, delta_relations
 from solve_rg_model import compute_hyperbolic_energy
+from solve_rg_model import compute_infinite_G
 import numpy as np
 import matplotlib.pyplot as plt
 import sys
@@ -9,6 +10,27 @@ import exact_diag as ed
 import time
 
 np.set_printoptions(precision=20)
+
+def do_infinite():
+    fig = plt.figure(figsize=(12, 8))
+    L = int(sys.argv[1])
+    N = int(sys.argv[2])
+    # camera = Camera(fig)
+    k, epsilon = rgk_spectrum(L, 1, 0, peri=False)
+    l = int(L/2)
+    n = int(N/2)
+    G_path, nsk = compute_infinite_G(l, n, epsilon, .1/L)
+    # for ns in nsk:
+        # plt.scatter(k, ns, color = 'g')
+        # camera.snap()
+    # animation = camera.animate()
+    # plt.show()
+    jumps = [ns[n-1] - ns[n] for ns in nsk]
+    G_path[-1] = 2*G_path[-2]
+    plt.scatter(G_path*l, jumps)
+    plt.show()
+
+
 
 def compare_bethe(diag=False):
     # doing 3 way test with bethe ansatz and exact diagonalization
@@ -136,12 +158,12 @@ def examine_deltas():
     else:
         epsilon = k**float(sys.argv[3])
         spectrum = 'k^{}'.format(sys.argv[3])
-    G = Grg * 2.8
+    G = Grg * 3.2
     print(G)
     g_step = 0.1/L
     if len(sys.argv) > 4:
         g_step = float(sys.argv[4])/L
-    start=0.7
+    start=0.85
 
     print('Params: L, N, spectrum, g_step = {} {} {} {}'.format(L, N, spectrum, g_step))
 
@@ -156,33 +178,6 @@ def examine_deltas():
     print('Got results. Plotting!')
 
     gs = -Gs/(1+Gs*(n-l/2-1))
-    der_deltas = np.gradient(deltas, gs, axis=0)
-    # fig = plt.figure(figsize=(12, 8))
-    # camera = Camera(fig)
-    # for i, delta in enumerate(deltas):
-        # Gi = Gs[i]
-        # g = gs[i]
-        # if Gi > Grg:
-            # color = 'g'
-            # color2 = 'b'
-        # else:
-            # color = 'm'
-            # color2 = 'r'
-        # # plt.scatter(k, -0.5*delta, color=color, s=4)
-        # # plt.scatter(k, 0.5*g*der_deltas[i], color=color2, s=4)
-        # # plt.scatter(k, nsk[i], color ='black', s=4)
-        # iom = -1./2 - delta/2 + g/4*np.sum(Z, axis=1)
-        # iomr = -1./2 - deltas_rgk[i]/2 + g/4*np.sum(Z_rgk, axis=1)
-        # # iomr[-1] = 2*iomr[-2] - iomr[-3]
-        # # plt.scatter(k, deltas_rgk[i], color=color, s = 8, marker='x')
-        # plt.scatter(k, iomr, color=color2, marker='x')
-        # # plt.scatter(k, delta, color='black', marker='o', s=4)
-        # plt.scatter(k, iom, color='black', marker=1)
-        # plt.axhline(0, color = 'black')
-        # camera.snap()
-    # animation = camera.animate()
-    # # animation.save('ioms_{}_{}.mp4'.format(L,N))
-    # plt.show()
     print('Columnular sum for rgk')
     print(np.sum(Z_rgk, axis=1))
 
@@ -216,6 +211,7 @@ def examine_deltas():
     plt.scatter(Gs, energies_rgk - energies_rgk[0], marker='x',
                 label = '{} spectrum'.format(spectrum2),
                 color = 'm')
+    plt.ylim(0, 1.1*(energies[-3]-energies[0]))
     plt.axvline(Grg)
     if G < Gp < 0 or G > Gp > 0:
         plt.axvline(start*Gp, ls = ':')
@@ -267,6 +263,7 @@ if __name__ == '__main__':
     start = time.time()
     examine_deltas()
     # compare_bethe()
+    # do_infinite()
     finish = time.time()
     print('Seconds elapsed: {}'.format(finish-start))
     plt.show()
