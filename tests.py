@@ -11,24 +11,25 @@ import time
 
 np.set_printoptions(precision=20)
 
-def do_infinite():
-    fig = plt.figure(figsize=(12, 8))
-    L = int(sys.argv[1])
-    N = int(sys.argv[2])
+def do_infinite(L, N):
     # camera = Camera(fig)
     k, epsilon = rgk_spectrum(L, 1, 0, peri=False)
     l = int(L/2)
     n = int(N/2)
-    G_path, nsk = compute_infinite_G(l, n, epsilon, .1/L)
-    # for ns in nsk:
-        # plt.scatter(k, ns, color = 'g')
-        # camera.snap()
-    # animation = camera.animate()
-    # plt.show()
-    jumps = [ns[n-1] - ns[n] for ns in nsk]
-    G_path[-1] = 2*G_path[-2]
-    plt.scatter(G_path*l, jumps)
-    plt.show()
+    alpha = 1
+    if L < 2*N:
+        alpha = -1
+    epsilon = epsilon * alpha # relationship between epsilon and eta
+    G_path, nsk = compute_infinite_G(l, n, epsilon, float(sys.argv[2])/L)
+    if alpha > 0:
+        jumps = [ns[n-1] - ns[n] for ns in nsk]
+    else:
+        jumps = [ns[-n] - ns[-(n+1)] for ns in nsk]
+    G_path[-1] = 1.1*G_path[-2]
+    G_path = G_path * alpha 
+    plt.scatter(l*G_path[:-1], jumps[:-1], label='{}, {}'.format(L,N))
+    plt.axhline(jumps[-1], ls = ':')
+    return jumps[-1]
 
 
 
@@ -158,12 +159,12 @@ def examine_deltas():
     else:
         epsilon = k**float(sys.argv[3])
         spectrum = 'k^{}'.format(sys.argv[3])
-    G = Grg * 3.2
+    G = Grg * 3.1
     print(G)
     g_step = 0.1/L
     if len(sys.argv) > 4:
         g_step = float(sys.argv[4])/L
-    start=0.85
+    start=0.7
 
     print('Params: L, N, spectrum, g_step = {} {} {} {}'.format(L, N, spectrum, g_step))
 
@@ -176,6 +177,16 @@ def examine_deltas():
     energies, nsk, deltas, Gs, Z = compute_hyperbolic_energy(l, n, G, epsilon,
                                                              g_step, start=start)
     print('Got results. Plotting!')
+    fig = plt.figure(figsize=(12,8))
+    camera = Camera(fig)
+    for i, ds in enumerate(deltas_rgk):
+        if Gs_rgk[i] < 0.9*start*Gp:
+            print(Gs_rgk[i])
+            plt.scatter(k, ds)
+    camera.snap()
+    camera.animate()
+    plt.show()
+
 
     gs = -Gs/(1+Gs*(n-l/2-1))
     print('Columnular sum for rgk')
@@ -211,12 +222,13 @@ def examine_deltas():
     plt.scatter(Gs, energies_rgk - energies_rgk[0], marker='x',
                 label = '{} spectrum'.format(spectrum2),
                 color = 'm')
-    plt.ylim(0, 1.1*(energies[-3]-energies[0]))
+    # plt.ylim(0, 1.1*(energies[-3]-energies[0]))
     plt.axvline(Grg)
     if G < Gp < 0 or G > Gp > 0:
         plt.axvline(start*Gp, ls = ':')
         plt.axvline((2-start)*Gp, ls = ':')
         plt.axvline(Gp, color='r')
+        plt.xlim(1.1*(2-start)*Gp, 0.9*start*Gp)
     # plt.xlabel('G')
     plt.ylabel('E_0')
     plt.legend()
@@ -231,17 +243,18 @@ def examine_deltas():
     rNrs = [iomr[n-1] for iomr in iomrs]
     rN1s = [iom[n] for iom in ioms]
     rN1rs = [iomr[n] for iomr in iomrs]
-    plt.scatter(Gs, r0s, label = '1st site {}'.format(spectrum), marker = '+')
-    plt.scatter(Gs, r0rs, label = '1st site {}'.format(spectrum2), marker = 'x')
-    plt.scatter(Gs, rNs, label = 'Mth site {}'.format(spectrum), marker = '+')
-    plt.scatter(Gs, rNrs, label = 'Mth {}'.format(spectrum2), marker = 'x')
-    plt.scatter(Gs, rN1s, label = 'M+1th site {}'.format(spectrum), marker = '+')
-    plt.scatter(Gs, rN1rs, label = 'M+1th {}'.format(spectrum2), marker = 'x')
-    plt.scatter(Gs, rLs, label = 'Lth site {}'.format(spectrum), marker = '+')
-    plt.scatter(Gs, rLrs, label = 'Lth site {}'.format(spectrum2), marker = 'x')
+    plt.scatter(Gs, r0s, label = '1st site {}'.format(spectrum), marker = '+', s=4)
+    plt.scatter(Gs, r0rs, label = '1st site {}'.format(spectrum2), marker = 'x', s=4)
+    plt.scatter(Gs, rNs, label = 'Mth site {}'.format(spectrum), marker = '+', s=4)
+    plt.scatter(Gs, rNrs, label = 'Mth {}'.format(spectrum2), marker = 'x', s=4)
+    plt.scatter(Gs, rN1s, label = 'M+1th site {}'.format(spectrum), marker = '+', s=4)
+    plt.scatter(Gs, rN1rs, label = 'M+1th {}'.format(spectrum2), marker = 'x', s=4)
+    plt.scatter(Gs, rLs, label = 'Lth site {}'.format(spectrum), marker = '+', s=4)
+    plt.scatter(Gs, rLrs, label = 'Lth site {}'.format(spectrum2), marker = 'x', s=4)
     plt.axvline(Grg)
     if G < Gp < 0 or G > Gp > 0:
         plt.axvline(Gp, color='r')
+        plt.xlim(1.1*(2-start)*Gp, 0.9*start*Gp)
     plt.xlabel('G')
     plt.ylabel('r_k(G)')
     plt.legend()
@@ -260,10 +273,26 @@ def examine_deltas():
     plt.legend()
 
 if __name__ == '__main__':
+    import pandas as pd
     start = time.time()
-    examine_deltas()
+    # examine_deltas()
     # compare_bethe()
-    # do_infinite()
+    plt.figure(figsize=(12,8))
+    plt.subplot(2,1,1)
+    Ls = np.array([600, 1200, 2400, 4800, 12000])
+    jumps = np.zeros(len(Ls))
+    for i, L in enumerate(Ls):
+        dens = float(sys.argv[1])
+        N = dens*L
+        jumps[i] = do_infinite(L, N)
     finish = time.time()
     print('Seconds elapsed: {}'.format(finish-start))
+    plt.legend()
+    plt.subplot(2,1,2)
+    plt.scatter(1./Ls, jumps)
+    plt.xlim(0, 1./Ls[0])
+    plt.ylim(0.85, 1.0)
     plt.show()
+
+    df = pd.DataFrame({'L': Ls, 'Zstar': jumps})
+    df.to_csv('results/infinites_{}.csv'.format(int(dens*100)))

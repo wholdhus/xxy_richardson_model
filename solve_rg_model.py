@@ -93,14 +93,6 @@ def make_g_path(gf, g_step):
     return g_path
 
 
-def get_dy(xs, ys, xind, yind):
-    # computes dy = d/dx y * Delta x
-    dyHere = ys[yind] - ys[yind-1]
-    dxHere = xs[xind] - xs[xind-1]
-    dxNext = xs[xind+1] - xs[xind]
-    return dyHere*dxNext/dxHere
-
-
 def use_g_inv(L, N, G, Z, g_step, start=0.9):
     finish = 2 - start
     Gamma = -1
@@ -111,10 +103,10 @@ def use_g_inv(L, N, G, Z, g_step, start=0.9):
     l1 = len(gp1)
     if G < finish*GP:
         Gp2 = -np.append(np.arange(-start*GP + g_step/10, -finish*GP,
-                              g_step/5), -finish*GP)
+                              g_step/10), -finish*GP)
     else:
         Gp2 = -np.append(np.arange(-start*GP + g_step/10, -G,
-                              g_step/5), -G)
+                              g_step/10), -G)
     gp2 = -Gp2/(1+Gp2*(N-L/2-1))
     l2 = len(gp2)
     gip2 = 1./gp2
@@ -144,21 +136,24 @@ def use_g_inv(L, N, G, Z, g_step, start=0.9):
 
     for i, gi in enumerate(gip2):
         j = i + l1 - 1
-        if i != 0:
+        if i != 0 and i != 1:
+            corr = (deltas[j]*gip2[i-1] - deltas[j-1]*gip2[i-2])*(gip2[i] - gip2[i-1])/(
+                    gip2[i-1] - gip2[i-2])
             Lambda = deltas[j] * gip2[i-1]
         else:
+            corr = (deltas[j]/g_path[j] - deltas[j-1]/g_path[j-1])*(gi - 1./g_path[j])/(
+                    1./g_path[j] - 1./g_path[j-1])
             Lambda = deltas[j] / gp1[-1]
         sol = root(lambda_relations, Lambda, args=(L, N, Z, gi, Gamma),
                 method='lm', options={'xtol':TOL})
         deltas[j+1] = sol.x*g_path[j+1]
 
-
     if G < finish*GP:
         for i, g in enumerate(gp3):
             j = i + l1 + l2 - 1
-            delta = deltas[j]
-            corr = get_dy(g_path, deltas, j-1, j)
-            delta = delta + corr
+            corr = (deltas[j] - deltas[j-1])*(g_path[j+1] - g_path[j])/(
+                    g_path[j] - g_path[j-1])
+            delta = deltas[j] + corr
             sol = root(delta_relations, delta, args=(L, N, Z, g, Gamma),
                        method='lm', options={'xtol':TOL})
             deltas[j+1] = sol.x
@@ -196,31 +191,29 @@ def compute_hyperbolic_deltas(L, N, G, epsilon, g_step,
             print('This is not going to work right now. Woops')
             return 'AAAAAAAAA'
     g_path = make_g_path(g_final, g_step)
-    g_path = g_path[1:] # getting rid of 0 because it's nicer
     G_path = -g_path/(1+g_path*(N-L/2-1))
     # Initial values for Delta with g small. The -2 values (initially
     # occupied states) go where the epsilons are smallest.
-    deltas = np.zeros((len(g_path) + 1, L), np.float64)
+    deltas = np.zeros((len(g_path), L), np.float64)
     eps_min = np.argsort(epsilon)
     deltas[0][eps_min[:N]] = -2
 
     # Finding root while varying g, using prev. solution to start
-    for i, g in enumerate(g_path):
+    for i, g in enumerate(g_path[1:]):
         print('{} out of {} steps'.format(i+1, len(g_path)))
         delta = deltas[i]
         if i > 1:
-            corr = get_dy(g_path, deltas, i-1, i)
+            corr = (deltas[i] - deltas[i-1])*(g_path[i+1] - g_path[i])/(g_path[i] - g_path[i-1])
             delta = delta + corr
         sol = root(delta_relations, delta, args=(L, N, Z, g, Gamma),
                 method='lm', options={'xtol':TOL})
         deltas[i+1] = sol.x
         # checking if we satisfy the delta relations
-        dr = delta_relations(deltas[i+1], L, N, Z, g_path[i], Gamma)
+        dr = delta_relations(deltas[i+1], L, N, Z, g, Gamma)
         errors = np.abs(dr[:-1]/np.mean(np.abs(deltas[i+1])))
         if np.max(errors)> 10**-10:
             print('WARNING: At G= {} error is'.format(G_path[i]))
             print(errors)
-    g_path = np.concatenate(([0], g_path)) # removed 0 earlier
     return g_path, deltas, Z
 
 
