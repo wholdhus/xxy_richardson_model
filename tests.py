@@ -33,7 +33,7 @@ def do_infinite(L, N):
 
 
 
-def compare_bethe(diag=False):
+def compare_bethe(diag=True):
     # doing 3 way test with bethe ansatz and exact diagonalization
     L = int(sys.argv[1])
     N = int(sys.argv[2])
@@ -47,7 +47,7 @@ def compare_bethe(diag=False):
     print('Deltas are:')
     print(deltas[-1])
     # dg=.001/L
-    dg = .02/L
+    dg = .1/L
     Gmr = 1./(L-N+1)
     if G > Gmr: # want results from 0 to Gmr (>0)
         imscale = .1/L
@@ -77,7 +77,7 @@ def compare_bethe(diag=False):
     if diag:
         for i, Gi in enumerate(Gp):
             print('G = {}'.format(Gi))
-            H = ed.form_hyperbolic_hamiltonian(L, N, Gi, epsilon)
+            H = ed.form_hyperbolic_hamiltonian(L, Gi, epsilon, N=N)
             denergies[i] = np.min(H.eigvalsh())
     plt.figure(figsize=(12, 8))
     plt.subplot(2,2,1)
@@ -272,7 +272,10 @@ def examine_deltas():
     plt.ylim(-0.5, 1.5)
     plt.legend()
 
+
 if __name__ == '__main__':
+    # compare_bethe()
+    # plt.show()
     import pandas as pd
     start = time.time()
     # examine_deltas()
