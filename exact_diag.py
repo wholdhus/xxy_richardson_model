@@ -1,8 +1,10 @@
 import numpy as np
-import scipy.sparse as sparse
 from quspin.basis import boson_basis_1d, spinless_fermion_basis_1d
 import quspin.basis as b
 from quspin.operators import hamiltonian, quantum_operator
+from scipy.optimize import minimize
+from solve_rg_model import compute_hyperbolic_energy, rgk_spectrum
+import pandas as pd
 
 def form_basis(L, N):
     basis = boson_basis_1d(L, N, sps=2) # specifying one boson per site
@@ -57,43 +59,70 @@ def form_ferm_hamiltonian(L, G, epsilon, N=None):
     else:
         basis = spinless_fermion_basis_1d(2*L, 2*N)
     if len(epsilon) != 2*L:
-        epsilon = np.concatenate((epsilon, epsilon[::-1]))
-    print(epsilon)
+        epsilon = np.concatenate((epsilon[::-1], epsilon))
     sqeps = np.sqrt(epsilon)
-    hop_vals = G*(np.outer(sqeps, sqeps))
+    hop_vals = -1*G*(np.outer(sqeps, sqeps))
     hops = []
     for i in range(L):
         for j in range(L):
-            new_hop = [[hop_vals[i, j], i, 2*L-(i+1), j, 2*L-(j+1)]]
+            new_hop = [[hop_vals[L+i, L+j], L+i, L-1-i, L-1-j, L+j]]
             hops = hops + new_hop
-    pot = [[0.5*epsilon[i], i] for i in range(L)]
-    potpos = [[0.5*epsilon[2*L-(i+1)], 2*L-(i+1)] for i in range(L)] 
-    static = [['++--', hops], ['n', pot], ['n', potpos]]
+    kin_neg = [[0.5*epsilon[L-1-i], L-1-i] for i in range(L)]
+    kin_pos = [[0.5*epsilon[L+i], L+i] for i in range(L)] 
+    # kin = [[epsilon[L+i], L+i] for i in range(L)]
+    static = [['++--', hops], ['n', kin_neg], ['n', kin_pos]]
     op_dict = {'static': static}
     H = quantum_operator(op_dict, basis=basis, check_herm=False, check_symm=False)
     return H
 
 
-def hartree_fock_energy(R1d, L, N, H):
-    R = R1d.reshape((L, L))
-    # basis1 = boson_basis_1d(L, sps=2)
-    basis1 = spinless_fermion_basis_1d(L)
-    state = np.zeros(basis1.Ns, dtype=np.complex128)
-    state[-1] = 1
-    creates = [None for i in range(L)]
+def hartree_fock_energy(R1d, L, N, H, cons=True, verbose=False):
+    # L is number of pairs -> need 2*L fermions
+    if cons:
+        R = R1d[:-1].reshape((2*L, 2*L))
+    else:
+        R = R1d.reshape((2*L, 2*L))
+    basis1 = spinless_fermion_basis_1d(2*L)
+    creates = [None for i in range(2*L)]
     for i in range(N):
-        create = []
+        cn = [None for i in range(L)]
+        cp = [None for i in range(L)]
         for j in range(L):
-            create = create + [[R[i,j], j]]
-        create_dict = {'static': [['+', create]]}
-        qop = quantum_operator(create_dict, basis=basis1, check_herm=False,
-                               check_symm=False,
-                               check_pcon=False)
-        creates[i] = qop
-    for alpha in creates:
+            cn[j] = [R[L-1-i, L-1-j], L-1-j]
+            cp[j] = [R[L+i, L+j], L+j]
+        cn_dict = {'static': [['+', cp]]}
+        cp_dict = {'static': [['+', cn]]}
+        cnop = quantum_operator(cp_dict, basis=basis1, check_herm=False,
+                                check_symm=False,
+                                check_pcon=False)
+        cpop = quantum_operator(cn_dict, basis=basis1, check_herm=False,
+                                check_symm=False,
+                                check_pcon=False)
+        creates[L-1-i] = cnop # alpha_-k^d
+        creates[L+i] = cpop # alpha_k^d
+    state = np.zeros(basis1.Ns)
+    state[-1] = 1 # starting in the vacuum state
+    n = 0
+    for i, alpha in enumerate(creates):
         if alpha is not None:
             state = alpha.dot(state)
-    hf_energy = H.matrix_ele(state, state)/np.dot(state, state)
+            n = n + 1
+    if cons:
+        hf_energy = H.matrix_ele(state, state)/np.dot(state, state) + R1d[-1]*np.abs(1-np.dot(state, state))
+    else:
+        hf_energy = H.matrix_ele(state, state)/np.dot(state, state)
+    if verbose:
+        print('There were {} excitations'.format(n))
+        print('Hartree fock state')
+        inds = np.argwhere(state != 0)
+        for i in inds:
+            bind = basis1.states[i]
+            print(state[i])
+            print('times')
+            print(basis1.int_to_state(bind))
+            print('plus')
+        print('Norm:')
+        print(np.dot(state, state))
     return float(hf_energy)
 
 
@@ -122,58 +151,51 @@ def test_pbcs():
 
 
 def test_hf(L, N):
-    from scipy.optimize import minimize
-    from solve_rg_model import compute_hyperbolic_energy, rgk_spectrum
-    R = np.diag(np.ones(L))
-    R1d = R.flatten()
-    print(len(R1d))
-    Gf1 = 1.5/(L-N+1)
-    Gf2 = 1.5/(L-2*N+1)
+    R = np.diag(np.ones(2*L))
+    R1d = np.append(R.flatten(), 1)
+    # R1d = R.flatten()
     k, epsilon = rgk_spectrum(2*L, 1, 0)
-    energies1, nsk, deltas, G_path1, Z = compute_hyperbolic_energy(L, N, Gf1, epsilon, 0.1/L)
-    energies2, nsk, deltas, G_path2, Z = compute_hyperbolic_energy(L, N, Gf2, epsilon, 0.1/L)
-    energies = np.concatenate((energies1, energies2[1:]))
-    energies = np.sort(energies)[::-1]
-    G_path = np.concatenate((G_path1, G_path2[1:]))
-    G_path = np.sort(G_path)
     do = 0
     Ehf = []
     Ghf = []
     Ee = []
+    G_path = np.linspace(0, 1, 20)*2./(L-2*N+1)
     for i, G in enumerate(G_path):
-        if do % 10 == 0:
+        if do % 5 == 0:
             Ghf = Ghf + [G]
-            H = form_hyperbolic_hamiltonian(L, G, epsilon, N=None)
-            sol = minimize(hartree_fock_energy, R1d, args=(L, N, H))
+            H = form_ferm_hamiltonian(L, G, epsilon, N=None)
+            # sol = minimize(hartree_fock_energy, R1d, args=(L, N, H))
+            sol = minimize(hartree_fock_energy, R1d, args=(L, N, H), method='Powell')
+            # sol = minimize(hartree_fock_energy, R1d, args=(L, N, H))
             R1d = sol.x
-            Ehf = Ehf + [hartree_fock_energy(R1d, L, N, H)]
+            EhfHere = hartree_fock_energy(R1d[:-1], L, N, H, verbose=True, cons=False)
+            Ehf = Ehf + [EhfHere]
+
+            Hf = form_ferm_hamiltonian(L, G, epsilon, N=N)
+            e, v = Hf.eigh()
+            EeHere = np.min(e)
+            Ee = Ee + [EeHere]
             print('')
             print('G={}'.format(G))
             print('HF energy')
-            print(Ehf[-1])
+            print(EhfHere)
             print('Exact energy')
-            print(energies[i])
+            print(Ee)
             print('Correlation energy')
-            print(Ehf[-1] - energies[i])
-            # Hf = form_hyperbolic_hamiltonian(L, G, epsilon, N=N)
-            Hf = form_ferm_hamiltonian(L, G, epsilon, N=N)
-            e, v = Hf.eigh()
-            Ee = Ee + [np.min(e)]
-            print('Difference from diag')
-            print(Ee[-1] - energies[i])
+            print(EhfHere - EeHere)
         else:
             print('Skipping')
         do = do + 1
-    import matplotlib.pyplot as plt
-    plt.scatter(G_path, energies, marker = 'x')
-    plt.scatter(Ghf, Ee, marker = '1')
-    plt.scatter(Ghf, Ehf, marker = 'o')
-    plt.scatter([-1./(N-1)], [N*np.sum(epsilon)/(N-1)], marker = 'x')
+    energies = pd.DataFrame()
+    energies['Hartree_Fock'] = Ehf
+    energies['Diagonalization'] = Ee
+    energies['G'] = Ghf
+    energies.to_csv('hf_energies_L{}_N{}.csv'.format(L, N))
 
-    # plt.ylim(0, 1.1*N*np.sum(epsilon)/(N-1))
-    plt.show()
 
 
 if __name__ == '__main__':
-    # test_pbcs()
-    test_hf(4, 3)
+    import sys
+    L = int(sys.argv[1])
+    N = int(sys.argv[2])
+    test_hf(L, N)
