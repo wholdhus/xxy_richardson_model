@@ -241,7 +241,7 @@ def compute_infinite_G(L, N, epsilon, g_step):
     return G_path, nsk
 
 
-def compute_hyperbolic_energy(L, N, G, epsilon, g_step,
+def compute_hyperbolic_energy(L, N, G, epsilon, g_step=.01,
                               start=0.9, use_fd=True):
     g_path, deltas, Z = compute_hyperbolic_deltas(L, N, G,
                                                   epsilon, g_step,

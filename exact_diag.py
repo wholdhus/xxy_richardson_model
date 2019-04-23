@@ -32,19 +32,27 @@ def construct_pbcs(L, N, epsilon):
         state = GammaPlus.dot(state)
     return state # should be pbcs state
 
-def construct_sd(L, occs):
-    basis = spinless_fermion_basis_1d(2*L)
-    creates_minus = [[1, L-1-j] for j in occs]
-    creates_plus = [[1, L+j] for j in occs]
-    creates = [['+', creates_minus], ['+', creates_plus]]
-    Creator = quantum_operator({'static': creates},
-                               basis=basis,
-                               check_herm=False,
-                               check_pcon=False,
-                               check_symm=False)
+
+def construct_sd(L, occs, N=None):
+    if N == None:
+        basis = spinless_fermion_basis_1d(2*L)
+    else:
+        basis = spinless_fermion_basis_1d(2*L, 2*N)
+    # create_inds = [[1, L+j] for j in occs] j can be + or -
+    # creates = [['+', create_inds]]
+    # Creator = quantum_operator({'static': creates},
+                               # basis=basis,
+                               # check_herm=False,
+                               # check_pcon=False,
+                               # check_symm=False)
     zero = np.zeros(basis.Ns)
     zero[-1] = 1 # this is the zero occupation state
-    return Creator.dot(zero)
+    state = zero
+    for i in occs:
+        Creator = quantum_operator({'static': [['+', [[1, L+ i]]]]}, basis=basis,
+                                   check_herm=False, check_pcon=False, check_symm=False)
+        state = Creator.dot(state)
+    return state
 
 
 def form_hyperbolic_hamiltonian(L, G, epsilon, N=None):
@@ -77,15 +85,15 @@ def form_ferm_hamiltonian(L, G, epsilon, N=None):
         basis = spinless_fermion_basis_1d(2*L, 2*N)
     if len(epsilon) != 2*L:
         epsilon = np.concatenate((epsilon[::-1], epsilon))
+    plt.plot(epsilon)
     sqeps = np.sqrt(epsilon)
-    hop_vals = -1*G*(np.outer(sqeps, sqeps))
     hops = []
     for i in range(L):
         for j in range(L):
-            new_hop = [[hop_vals[L+i, L+j], L+i, L-1-i, L-1-j, L+j]]
+            new_hop = [[-1*G*np.sqrt(epsilon[L+i]*epsilon[L+j]), L+i, L-1-i, L-1-j, L+j]]
             hops = hops + new_hop
     kin_neg = [[0.5*epsilon[L-1-i], L-1-i] for i in range(L)]
-    kin_pos = [[0.5*epsilon[L+i], L+i] for i in range(L)] 
+    kin_pos = [[0.5*epsilon[L+i], L+i] for i in range(L)]
     static = [['++--', hops], ['n', kin_neg], ['n', kin_pos]]
     dynamic = []
     H = quantum_operator({'static': static}, basis=basis)
@@ -133,6 +141,16 @@ def hartree_fock_energy(R1d, L, N, H, verbose=False):
         print('Norm:')
         print(np.dot(state, state))
     return float(hf_energy)
+
+def print_state(state, basis): 
+    inds = np.argwhere(state != 0)
+    for i in inds:
+        bind = basis.states[i]
+        print(state[i])
+        print('times')
+        print(basis.int_to_state(bind))
+        if i != inds[-1]:
+            print('plus')
 
 
 def test_pbcs():
@@ -195,8 +213,9 @@ def test_hf(L, N):
         print(EeHere)
         print('Correlation energy')
         print(EhfHere - EeHere)
-        sns.heatmap(R1d.reshape(2*L, 2*L), center=0)
-        plt.show()
+        if G == G_path[-1]:
+            sns.heatmap(R1d.reshape(2*L, 2*L), center=0)
+            plt.show()
     energies = pd.DataFrame()
     energies['Hartree_Fock'] = Ehf
     energies['Diagonalization'] = Ee
@@ -212,10 +231,96 @@ def test_hf(L, N):
     R1ds.to_csv('Rs_{}_{}.csv'.format(L, N))
 
 
+def n_k(L, state, basis, boson=False):
+    if boson:
+        ks = range(L)
+        ns = np.zeros(L)
+    else:
+        ks = range(2*L)
+        ns = np.zeros(2*L)
+    norm = np.dot(state, state)
+    for k in ks:
+        nk = quantum_operator({'static': [['n', [[1, k]]]]}, basis=basis,
+                check_herm=False, check_symm=False)
+        ns[k] = nk.matrix_ele(state, state)/norm
+    # plt.scatter(ks, ns)
+    # plt.show()
+    print('N = {}'.format(np.sum(ns)))
+    return ns
+
+
 
 if __name__ == '__main__':
     import sys
     L = int(sys.argv[1])
     N = int(sys.argv[2])
     G = float(sys.argv[3])
-    test_hf(L, N)
+    k, epsilon = rgk_spectrum(2*L, 1, 0)
+    H = form_ferm_hamiltonian(L, G, epsilon)
+
+    inds_symm = np.array(range(2*N))-N
+    print(inds_symm)
+
+    inds_plus = np.array(range(2*N))-int(N/2+1)
+    print(inds_plus)
+
+    inds_minus = -1*inds_plus -1
+
+    symm_state = construct_sd(L, inds_symm)
+    plus_state = construct_sd(L, inds_plus)
+    minus_state = construct_sd(L, inds_minus)
+
+    basis = spinless_fermion_basis_1d(2*L)
+
+
+    print('Symmetric state:')
+    # print_state(symm_state, basis)
+    norm = 1./np.sqrt(np.dot(symm_state, symm_state))
+    E_symm = H.matrix_ele(symm_state, symm_state)*norm**2
+    print('Energy: {}'.format(E_symm))
+    print(np.max(np.abs(H.matvec(symm_state)*norm - E_symm*symm_state*norm)))
+
+
+    print('Plus state')
+    # print_state(plus_state, basis)
+    norm = 1./np.sqrt(np.dot(plus_state, plus_state))
+    E_plus = H.matrix_ele(plus_state, plus_state)*norm**2
+    print('Energy: {}'.format(E_plus))
+    print(np.max(np.abs(H.matvec(plus_state)*norm - E_plus*plus_state*norm)))
+
+    print('Minus state')
+    # print_state(minus_state, basis)
+    norm = 1./np.sqrt(np.dot(minus_state, minus_state))
+    E_minus = H.matrix_ele(minus_state, minus_state)*norm**2
+    print('Energy: {}'.format(E_minus))
+    print(np.max(np.abs(H.matvec(minus_state)*norm - E_minus*minus_state*norm)))
+
+    print('Halfsies')
+    state = plus_state + minus_state
+    norm = np.sqrt(np.dot(state, state))
+    E_h = H.matrix_ele(state, state)/(norm**2)
+    print(E_h)
+    print(np.max(np.abs(H.matvec(state)/norm - E_h * state/norm)))
+    n_k(L, state, basis)
+
+    print('Exacto!')
+    H2 = form_ferm_hamiltonian(L, G, epsilon, N=N)
+    basis_n = spinless_fermion_basis_1d(2*L, 2*N)
+    E, V = H2.eigh()
+    E0 = 10
+    print('')
+    for v in V:
+        E = H2.matrix_ele(v, v)/(np.dot(v, v)**2)
+        if E <= E0:
+            E0 = E
+            print('New lowest energy state!')
+            print_state(v, basis)
+            print('Energy is {}'.format(E))
+
+    print('Exacto2!')
+    H3 = form_hyperbolic_hamiltonian(L, G, epsilon, N=N)
+    E, V = H3.eigh()
+    print(E)
+    basis_b = form_basis(L, N)
+    print_state(V[0], basis_b)
+    n_k(L, V[0], basis_b, boson=True)

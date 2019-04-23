@@ -9,7 +9,7 @@ from xxy_richardson_gaudin_bethe import bethe
 import exact_diag as ed
 import time
 
-np.set_printoptions(precision=20)
+# np.set_printoptions(precision=20)
 
 def do_infinite(L, N):
     # camera = Camera(fig)
@@ -26,7 +26,7 @@ def do_infinite(L, N):
     else:
         jumps = [ns[-n] - ns[-(n+1)] for ns in nsk]
     G_path[-1] = 1.1*G_path[-2]
-    G_path = G_path * alpha 
+    G_path = G_path * alpha
     plt.scatter(l*G_path[:-1], jumps[:-1], label='{}, {}'.format(L,N))
     plt.axhline(jumps[-1], ls = ':')
     return jumps[-1]
@@ -273,29 +273,17 @@ def examine_deltas():
     plt.legend()
 
 
-if __name__ == '__main__':
-    # compare_bethe()
-    # plt.show()
-    import pandas as pd
-    start = time.time()
-    # examine_deltas()
-    # compare_bethe()
-    plt.figure(figsize=(12,8))
-    plt.subplot(2,1,1)
-    Ls = np.array([600, 1200, 2400, 4800, 12000])
-    jumps = np.zeros(len(Ls))
-    for i, L in enumerate(Ls):
-        dens = float(sys.argv[1])
-        N = dens*L
-        jumps[i] = do_infinite(L, N)
-    finish = time.time()
-    print('Seconds elapsed: {}'.format(finish-start))
-    plt.legend()
-    plt.subplot(2,1,2)
-    plt.scatter(1./Ls, jumps)
-    plt.xlim(0, 1./Ls[0])
-    plt.ylim(0.85, 1.0)
+def compare_planewave(L, N):
+    k, epsilon = rgk_spectrum(2*L, 1, 0)
+    G = 1.4/(L-2*N+1)
+    g_step = .1/L
+
+    E, n, delta, G_path, Z = compute_hyperbolic_energy(L, N, G, epsilon,
+                                                       g_step)
+    Epw = (1-G_path)*np.sum(epsilon[:N])
+    plt.scatter(G_path, E)
+    plt.scatter(G_path, Epw)
     plt.show()
 
-    df = pd.DataFrame({'L': Ls, 'Zstar': jumps})
-    df.to_csv('results/infinites_{}.csv'.format(int(dens*100)))
+if __name__ == '__main__':
+    compare_planewave(80, 60)
