@@ -68,6 +68,8 @@ def der_delta(Delta, L, N, Z, g, Gamma, throw=False, scale=1):
 
 
 def compute_particle_number_fd(Delta, lastDelta, nextDelta, g, g_step):
+    """Computes occupation numbers from finite difference instead of
+    analytic derivatives."""
     der_delta = (nextDelta - lastDelta)/(2*g_step)
     n = -0.5 * Delta + 0.5*g*der_delta
     return n, der_delta
@@ -86,14 +88,32 @@ def make_g_path(gf, g_step):
     else:
         g_path = np.arange(0, gf, g_step)
     # was running into issues where this was less than machine epsilon
-    if np.abs(g_path[-1] - gf) > 10 **-10:
+    if np.abs(g_path[-1] - gf) > TOL:
         g_path = np.append(g_path, gf)
     else:
         g_path[-1] = gf
     return g_path
 
 
-def use_g_inv(L, N, G, Z, g_step, start=0.9):
+def initialize_deltas(deltas, init_state):
+    if init_state is None:
+        # Initial values for Delta with g small. The -2 values (initially
+        # occupied states) go where the epsilons are smallest.
+        eps_min = np.argsort(epsilon)
+        deltas[0][eps_min[:N]] = -2
+    else:
+        # Starting with N random states occupied
+        inds = np.random.choice(range(L), N, replace=False)
+        deltas[0][inds] = -2
+    return deltas
+
+
+def use_g_inv(L, N, G, Z, g_step, start=0.9,
+              init_state=None):
+    """
+    Avoids an issue where g->infinity for finite G by switching
+    to incrementing 1/g around that point.
+    """
     finish = 2 - start
     Gamma = -1
     GP = 1./(1-N+L/2)
@@ -121,9 +141,9 @@ def use_g_inv(L, N, G, Z, g_step, start=0.9):
         g_path = np.concatenate((g_path, gp3))
         l = l + l3
     deltas = np.zeros((l,L), np.float64)
-    deltas[0][:N] = -2 # assuming these have lowest epsilon
+    # populating initial values for delta
+    deltas = initialize_deltas(deltas, init_state)
 
-    # Now we have our route!
 
     for i, g in enumerate(gp1[1:]): # we already have the g=0 solution
         delta = deltas[i]
@@ -161,7 +181,8 @@ def use_g_inv(L, N, G, Z, g_step, start=0.9):
 
 
 def compute_hyperbolic_deltas(L, N, G, epsilon, g_step,
-                              start=0.9, Gisg=False):
+                              start=0.9, Gisg=False,
+                              init_state=None):
     Gamma = -1 # hyperbolic case
     # Compute Z matrix.
     Z = np.zeros((L, L))
@@ -185,18 +206,17 @@ def compute_hyperbolic_deltas(L, N, G, epsilon, g_step,
             grg = np.nan
         if G < start*Gp < 0: # need to do some trickz
             print('Using inverted g stuff')
-            deltas, g_path = use_g_inv(L, N, G, Z, g_step, start=start)
+            deltas, g_path = use_g_inv(L, N, G, Z, g_step, start=start,
+                                       init_state=init_state)
             return g_path, deltas, Z
         elif G > start*Gp > 0: # need to do similar trixkcx
             print('This is not going to work right now. Woops')
             return 'AAAAAAAAA'
     g_path = make_g_path(g_final, g_step)
     G_path = -g_path/(1+g_path*(N-L/2-1))
-    # Initial values for Delta with g small. The -2 values (initially
-    # occupied states) go where the epsilons are smallest.
     deltas = np.zeros((len(g_path), L), np.float64)
-    eps_min = np.argsort(epsilon)
-    deltas[0][eps_min[:N]] = -2
+    deltas = initialize_deltas(deltas, init_state)
+
 
     # Finding root while varying g, using prev. solution to start
     for i, g in enumerate(g_path[1:]):
@@ -280,33 +300,15 @@ def compute_hyperbolic_energy(L, N, G, epsilon, g_step,
     return energies, nsk, deltas, G_path, Z
 
 
-def rgk_spectrum(L, t1, t2, peri=False, fix=False):
+def rgk_spectrum(L, t1, t2):
+    if t2 != 0:
+        print('Warning: spectrum will be degenerate, which is bad.')
     r = np.array([(i+1.0)/L for i in range(L)], dtype=np.float64)
-    if peri: # we actually need to handle this more carefully
-        k1 = np.append(
-                    np.array([2*(i+1)*np.pi/L for i in range(int(L/2-1))],
-                    np.float64), 0)
-        # k2 = np.append(
-                    # np.array([-2*(i+1)*np.pi/L for i in range(int(L/2-1))],
-                    # np.float64), -np.pi)
-        # k = np.sort(np.concatenate((k2,k1)))
-        k = k1
-    else: # antiperiodic bc
-        k1 = np.array(
+    k = np.array(
                 [(2*i+1)*np.pi/L for i in range(int(L/2))],
                 np.float64)
-        # k2 = np.array(
-                # [-(2*i+1)*np.pi/L for i in range(int(L/2))],
-                # np.float64)
-        # k = np.sort(np.concatenate((k2, k1)))
-        k = k1
     eta = np.sin(k/2)*np.sqrt(t1 + 4*t2*(np.cos(k/2)**2))
     epsilon = eta**2
-    if fix:
-        # l = int(L/20)
-        # epsilon[-l:] = epsilon[-l:] + (epsilon[-l:]**2 - epsilon[-l]**2)
-        # epsilon[-1] = 2*epsilon[-1]
-        epsilon[-1] = 0
     return k, epsilon
 
 

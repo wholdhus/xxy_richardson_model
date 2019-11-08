@@ -26,117 +26,10 @@ def do_infinite(L, N):
     else:
         jumps = [ns[-n] - ns[-(n+1)] for ns in nsk]
     G_path[-1] = 1.1*G_path[-2]
-    G_path = G_path * alpha 
+    G_path = G_path * alpha
     plt.scatter(l*G_path[:-1], jumps[:-1], label='{}, {}'.format(L,N))
     plt.axhline(jumps[-1], ls = ':')
     return jumps[-1]
-
-
-
-def compare_bethe(diag=True):
-    # doing 3 way test with bethe ansatz and exact diagonalization
-    L = int(sys.argv[1])
-    N = int(sys.argv[2])
-    k, epsilon = rgk_spectrum(2*L, 1, 0, peri=False)
-    print(epsilon)
-    G =float(sys.argv[3])/(L-2*N+1)
-    # G = 1.4/(L-N+1)
-    print(G)
-    qenergies, qn, deltas, Ges, Z = compute_hyperbolic_energy(L, N, G,
-            epsilon, .05/L)
-    print('Deltas are:')
-    print(deltas[-1])
-    # dg=.001/L
-    dg = .1/L
-    Gmr = 1./(L-N+1)
-    if G > Gmr: # want results from 0 to Gmr (>0)
-        imscale = .1/L
-        # Bethe ansatz results from Gmr -> G
-        rE1, iE1, rP1, iP1, er1, Gp1 = bethe.compute_energy(L, N, G, epsilon,
-                                                  imscale=imscale, dg=dg, hold=0.0)
-        # Bethe ansatz results from Gmr -> 0
-        rE2, iE2, rP2, iP2, er2, Gp2 = bethe.compute_energy(L, N, 0, epsilon,
-                                                  imscale=imscale, dg=dg, hold=0.0)
-
-        Gp = np.concatenate((Gp2, Gp1[1:]))
-        benergies = np.concatenate((rE2, rE1[1:]))
-    elif 0 < G < Gmr: # we'll just go from 0 to Gmr
-        # imscale = 1./(L**2)
-        imscale = 0.01/L
-        rE, iE, rP, iP, er, Gp = bethe.compute_energy(L, N, 0, epsilon,
-                                                      imscale=imscale, dg=dg, hold=0.0)
-        benergies = rE
-    else: # we go from Gmr to G
-        imscale = .1/L
-        rE, iE, rP, iP, er, Gp = bethe.compute_energy(L, N, G, epsilon,
-                                                      imscale=imscale, dg=dg, hold=0.5)
-        benergies = rE
-
-    l = len(Gp)
-    denergies = np.zeros(l)
-    if diag:
-        for i, Gi in enumerate(Gp):
-            print('G = {}'.format(Gi))
-            H = ed.form_hyperbolic_hamiltonian(L, Gi, epsilon, N=N)
-            denergies[i] = np.min(H.eigvalsh())
-    plt.figure(figsize=(12, 8))
-    plt.subplot(2,2,1)
-    plt.scatter(Ges, qenergies, label = 'quad', marker = '1')
-    plt.scatter(Gp, benergies, label = 'rg', marker = 'x')
-    if diag:
-        plt.scatter(Gp, denergies, label = 'diag', marker = 'o', s=4,
-                    color='r')
-    Gmr = 1./(L-N+1)
-    Grg = 1./(L-2*N+1)
-    Gn = -2./(N-1)
-    if np.min(Gp) < Gmr < np.max(Gp):
-        plt.axvline(Gmr, color='r')
-    if np.min(Gp) < Grg < np.max(Gp):
-        plt.axvline(Grg, color = 'g')
-    if np.min(Gp) < Gn < np.max(Gp):
-        plt.axvline(Gn, color = 'c')
-    plt.ylim(0.5*np.min(qenergies), 1.5*np.max(qenergies))
-    plt.legend()
-
-    plt.subplot(2,2,2)
-    if diag:
-        plt.scatter(Gp, benergies-denergies)
-
-    plt.subplot(2,2,3)
-    for i in range(N):
-        if G > Gmr:
-            reals1 = [rP1[j][i] for j in range(len(Gp1))]
-            plt.scatter(Gp1, reals1, s=4)
-            reals2 = [rP2[j][i] for j in range(len(Gp2))]
-            plt.scatter(Gp2, reals2, s=4)
-        else:
-            reals = [rP[j][i] for j in range(len(Gp))]
-            plt.scatter(Gp, reals, s=4)
-    if np.min(Gp) < Gmr < np.max(Gp):
-        plt.axvline(Gmr, color='r')
-    if np.min(Gp) < Grg < np.max(Gp):
-        plt.axvline(Grg, color = 'g')
-    if np.min(Gp) < Gn < np.max(Gp):
-        plt.axvline(Gn, color = 'c')
-    plt.ylim(-1, 1)
-
-    plt.subplot(2,2,4)
-    for i in range(N):
-        if G > Gmr:
-            imps1 = [iP1[j][i] for j in range(len(Gp1))]
-            plt.scatter(Gp1, imps1, s=4)
-            imps2 = [iP2[j][i] for j in range(len(Gp2))]
-            plt.scatter(Gp2, imps2, s=4)
-        else:
-            imps = [iP[j][i] for j in range(len(Gp))]
-            plt.scatter(Gp, imps, s=4)
-    if np.min(Gp) < Gmr < np.max(Gp):
-        plt.axvline(Gmr, color='r')
-    if np.min(Gp) < Grg < np.max(Gp):
-        plt.axvline(Grg, color = 'g')
-    if np.min(Gp) < Gn < np.max(Gp):
-        plt.axvline(Gn, color = 'c')
-    # plt.ylim(-1, 1)
 
 
 def examine_deltas():
@@ -274,12 +167,10 @@ def examine_deltas():
 
 
 if __name__ == '__main__':
-    # compare_bethe()
-    # plt.show()
+
     import pandas as pd
     start = time.time()
-    # examine_deltas()
-    # compare_bethe()
+
     plt.figure(figsize=(12,8))
     plt.subplot(2,1,1)
     Ls = np.array([600, 1200, 2400, 4800, 12000])
