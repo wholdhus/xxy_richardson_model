@@ -95,12 +95,13 @@ def make_g_path(gf, g_step):
     return g_path
 
 
-def initialize_deltas(deltas, init_state):
+def initialize_deltas(deltas, L, N, init_state):
     if init_state is None:
         # Initial values for Delta with g small. The -2 values (initially
         # occupied states) go where the epsilons are smallest.
-        eps_min = np.argsort(epsilon)
-        deltas[0][eps_min[:N]] = -2
+        # eps_min = np.argsort(epsilon)
+        # deltas[0][eps_min[:N]] = -2
+        deltas[0][:N] = -2
     else:
         # Starting with N random states occupied
         inds = np.random.choice(range(L), N, replace=False)
@@ -142,7 +143,7 @@ def use_g_inv(L, N, G, Z, g_step, start=0.9,
         l = l + l3
     deltas = np.zeros((l,L), np.float64)
     # populating initial values for delta
-    deltas = initialize_deltas(deltas, init_state)
+    deltas = initialize_deltas(deltas, L, N, init_state)
 
 
     for i, g in enumerate(gp1[1:]): # we already have the g=0 solution
@@ -215,12 +216,12 @@ def compute_hyperbolic_deltas(L, N, G, epsilon, g_step,
     g_path = make_g_path(g_final, g_step)
     G_path = -g_path/(1+g_path*(N-L/2-1))
     deltas = np.zeros((len(g_path), L), np.float64)
-    deltas = initialize_deltas(deltas, init_state)
+    deltas = initialize_deltas(deltas, L, N, init_state)
 
 
     # Finding root while varying g, using prev. solution to start
     for i, g in enumerate(g_path[1:]):
-        print('{} out of {} steps'.format(i+1, len(g_path)))
+        # print('{} out of {} steps'.format(i+1, len(g_path)))
         delta = deltas[i]
         if i > 1:
             corr = (deltas[i] - deltas[i-1])*(g_path[i+1] - g_path[i])/(g_path[i] - g_path[i-1])
@@ -237,11 +238,13 @@ def compute_hyperbolic_deltas(L, N, G, epsilon, g_step,
     return g_path, deltas, Z
 
 
-def compute_infinite_G(L, N, epsilon, g_step):
+def compute_infinite_G(L, N, epsilon, g_step, init_state):
     g = 1./(1-N+L/2)
-    g_path, deltas, Z = compute_hyperbolic_deltas(L, N, g, epsilon, g_step, Gisg=True)
+    g_path, deltas, Z = compute_hyperbolic_deltas(L, N, g, epsilon, g_step,
+                                                  init_state=init_state, Gisg=True)
     G_path = -g_path/(1+g_path*(N-L/2-1))
-    print(G_path)
+    # print(g_path)
+    # print(G_path)
     try:
         der_deltas = np.gradient(deltas, g_path, axis=0)
     except: # Need to do my own version of gradient because doesn't work on karst
@@ -256,16 +259,24 @@ def compute_infinite_G(L, N, epsilon, g_step):
     l = len(g_path)
     # Now forming eigenvalues of IM and observables
     nsk = np.zeros((l, L))
+    lambds = 1/(1 + G_path*(N - L/2 - 1))
+    energies = np.zeros(l)
     for i, g in enumerate(g_path):
         nsk[i] = -0.5*deltas[i] + 0.5*g*der_deltas[i]
-    return G_path, nsk
+        ioms = -1./2 - deltas[i]/2 + g/4*np.sum(Z, axis=1)
+        # energies[i] = (1/lambds[i] * np.dot(epsilon, ioms)
+        #             + np.sum(epsilon)*(1./2 - 3/4*G_path[i]))
+        energies[i] = np.dot(epsilon, ioms) + np.sum(epsilon)/2
+    return G_path, nsk, energies
 
 
 def compute_hyperbolic_energy(L, N, G, epsilon, g_step,
-                              start=0.9, use_fd=True):
+                              start=0.9, use_fd=True,
+                              init_state=None):
     g_path, deltas, Z = compute_hyperbolic_deltas(L, N, G,
                                                   epsilon, g_step,
-                                                  start=start)
+                                                  start=start,
+                                                  init_state=init_state)
     if use_fd:
         # taking derivatives via finite difference
         try:
@@ -314,43 +325,16 @@ def rgk_spectrum(L, t1, t2):
 
 if __name__ == '__main__':
     import matplotlib.pyplot as plt
-    import sys
-    L = int(sys.argv[1])
-    N = int(sys.argv[2])
-    g_step = float(sys.argv[3])
-    G = 1.1/(L-2*N+1)
-    # G = 2.0/(1-N+L/2)
-    k, epsilon_rgk = rgk_spectrum(L, 1, 0)
-    # epsilon = k**2
-    epsilon = k**3
-    plt.figure(figsize=(12,8))
-    plt.subplot(2,1,1)
-    # E, n, Delta, Gs = compute_hyperbolic_energy(L, N, G, epsilon, g_step)
-    # plt.scatter(Gs, E, s=8)
-    E2, n2, Delta2, G2, Z = compute_hyperbolic_energy(L, N, G, epsilon, g_step,
-            start=0.9, use_fd=False)
-    plt.scatter(G2, E2, s=2)
-    plt.axvline(1./(L-2*N+1), color='g')
-    # plt.axvline(2./(L-2*N+1), color='m')
-    # plt.axvline(-2./(N-1), color = 'y')
-    # plt.ylim(275, 285)
-
-    # plt.subplot(3,1,2)
-    # de = np.gradient(E2, G2)
-    # d2e = np.gradient(de, G2)
-    # d3e = np.gradient(d2e, G2)
-    # plt.scatter(G2[10:-10], d3e[10:-10])
-
-    plt.subplot(2,1,2)
-    nsN = np.array([ns[N-1] for ns in n2])
-    nsN1 = np.array([ns[N] for ns in n2])
-    qp = nsN - nsN1
-    plt.scatter(G2, qp, s=2)
-    plt.scatter(G2, nsN, s=2)
-    plt.scatter(G2, nsN1, s=2)
-    plt.axvline(1./(L-2*N+1), color = 'g')
-    plt.axvline(1./(L-N+1), color = 'r')
-    # plt.axvline(-2./(N-1), color = 'y')
-    # plt.axvline(2./(L-2*N+1), color = 'm')
-    plt.ylim(0, 1)
+    L = 40
+    N = 30
+    G = 100/(L-2*N+1)
+    k, epsilon = rgk_spectrum(L*2, 1, 0)
+    plt.figure(figsize=(12, 8))
+    for i in range(10):
+        Es, ns, ds, G_path, Zs = compute_hyperbolic_energy(
+                                    L, N, G, epsilon, 0.5/L, init_state='r')
+        if min(Es) < Es[0]:
+            print('Woops unstable')
+        else:
+            plt.scatter(G_path, Es)
     plt.show()
