@@ -181,6 +181,38 @@ def use_g_inv(L, N, G, Z, g_step, start=0.9,
     return deltas, g_path
 
 
+def compute_weird_deltas(L, N, couplings, epsilon, g_step,
+                              start=0.9, Gisg=False,
+                              init_state=None):
+    [a, b, c] = couplings
+    Gamma = b**2-a*c # hyperbolic case
+    # Compute Z matrix.
+    Z = np.zeros((L, L))
+    for i in range(L):
+        for j in range(i):  # j < i.
+            Z[i, j] = (a + b*(epsilon[i] + epsilon[j]) + c*epsilon[i]*epsilon[j]
+                        )/(epsilon[i]-epsilon[j])
+            Z[j, i] = -Z[i, j]
+
+    g_path = np.arange(0, 1, g_step)
+    # Finding root while varying g, using prev. solution to start
+    for i, g in enumerate(g_path):
+        # print('{} out of {} steps'.format(i+1, len(g_path)))
+        delta = deltas[i]
+        if i > 1:
+            corr = (deltas[i] - deltas[i-1])*(g_path[i+1] - g_path[i])/(g_path[i] - g_path[i-1])
+            delta = delta + corr
+        sol = root(delta_relations, delta, args=(L, N, Z, Gamma),
+                method='lm', options={'xtol':TOL})
+        deltas[i+1] = sol.x
+        # checking if we satisfy the delta relations
+        dr = delta_relations(deltas[i+1], L, N, Z, g, Gamma)
+        errors = np.abs(dr[:-1]/np.mean(np.abs(deltas[i+1])))
+        if np.max(errors)> 10**-10:
+            print('WARNING: bad')
+    return g_path, deltas, Z
+
+
 def compute_hyperbolic_deltas(L, N, G, epsilon, g_step,
                               start=0.9, Gisg=False,
                               init_state=None):
@@ -233,8 +265,8 @@ def compute_hyperbolic_deltas(L, N, G, epsilon, g_step,
         dr = delta_relations(deltas[i+1], L, N, Z, g, Gamma)
         errors = np.abs(dr[:-1]/np.mean(np.abs(deltas[i+1])))
         if np.max(errors)> 10**-10:
-            print('WARNING: At G= {} error is'.format(G_path[i]))
-            print(errors)
+            print('WARNING: At G= {} mean error is'.format(G_path[i]))
+            print(np.mean(errors))
     return g_path, deltas, Z
 
 
@@ -243,8 +275,8 @@ def compute_infinite_G(L, N, epsilon, g_step, init_state):
     g_path, deltas, Z = compute_hyperbolic_deltas(L, N, g, epsilon, g_step,
                                                   init_state=init_state, Gisg=True)
     G_path = -g_path/(1+g_path*(N-L/2-1))
-    # print(g_path)
-    # print(G_path)
+    print(g_path)
+    print(G_path)
     try:
         der_deltas = np.gradient(deltas, g_path, axis=0)
     except: # Need to do my own version of gradient because doesn't work on karst

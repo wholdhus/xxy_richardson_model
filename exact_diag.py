@@ -1,10 +1,10 @@
 import numpy as np
 from quspin.basis import boson_basis_1d, spinless_fermion_basis_1d
-import quspin.basis as b
 from quspin.operators import hamiltonian, quantum_operator
-from scipy.optimize import minimize
-from solve_rg_model import compute_hyperbolic_energy, rgk_spectrum
-import pandas as pd
+from solve_rg_model import rgk_spectrum
+# import pandas as pd
+import matplotlib.pyplot as plt
+from scipy.optimize import curve_fit
 
 def form_basis(L, N):
     basis = boson_basis_1d(L, N, sps=2) # specifying one boson per site
@@ -30,14 +30,16 @@ def construct_pbcs(L, N, epsilon):
     return state # should be pbcs state
 
 
-def form_hyperbolic_hamiltonian(L, G, epsilon, N=None):
+def form_hyperbolic_hamiltonian(L, G, epsilon, N=None, no_kin=True):
     if N is None:
         basis = boson_basis_1d(L, sps=2)
     else:
         basis = form_basis(L, N)
-        print(basis)
     sqeps = np.sqrt(epsilon)
-    hop_vals = -1*G*(np.outer(sqeps, sqeps))
+    if not no_kin:
+        hop_vals = -1*G*(np.outer(sqeps, sqeps))
+    else:
+        hop_vals = np.full((L, L), 1)
     n_vals = np.diag(epsilon)
     hops = []
     for i in range(L):
@@ -45,35 +47,60 @@ def form_hyperbolic_hamiltonian(L, G, epsilon, N=None):
             new_hop = [[hop_vals[i, j], i, j]]
             hops = hops + new_hop
     pot = [[epsilon[i], i] for i in range(L)]
+    if no_kin:
+        pot = [[0, i] for i in range(L)]
     static = [['+-', hops], ['n', pot]]
-    dynamic = []
     # H = hamiltonian(static, dynamic, basis=basis, dtype=np.float64)
     op_dict = {'static': static}
     H = quantum_operator(op_dict, basis=basis, check_herm=False, check_symm=False)
-    return H
+    return H, basis
 
 
-def form_ferm_hamiltonian(L, G, epsilon, N=None):
-    if N is None:
-        basis = spinless_fermion_basis_1d(2*L)
-    else:
-        basis = spinless_fermion_basis_1d(2*L, 2*N)
-    if len(epsilon) != 2*L:
-        epsilon = np.concatenate((epsilon[::-1], epsilon))
+def form_ferm_hamiltonian(L, G, epsilon, N, dd=0):
+    NF = int(2*N)
+    basis = spinless_fermion_basis_1d(2*L, Nf=int(2*N))
+    # if len(epsilon) != 2*L:
+    #     epsilon = np.concatenate((epsilon[::-1], epsilon))
     sqeps = np.sqrt(epsilon)
     hop_vals = -1*G*(np.outer(sqeps, sqeps))
+    if G <= -999:
+        hop_vals = (-1*np.outer(sqeps, sqeps))
+    densdens = []
     hops = []
     for i in range(L):
         for j in range(L):
-            new_hop = [[hop_vals[L+i, L+j], L+i, L-1-i, L-1-j, L+j]]
+            new_hop = [[hop_vals[i, j], L+i, L-1-i, L-1-j, L+j]]
+            if i != j:
+                new_dd = [[dd*hop_vals[i, j], L+i, L+j],
+                          [dd*hop_vals[i, j], L+i, L-1-j],
+                          [dd*hop_vals[i, j], L-1-i, L+j],
+                          [dd*hop_vals[i, j], L-1-i, L-1-j]]
+                densdens = densdens + new_dd
+            else:
+                new_dd = [[dd*hop_vals[i, j], L+i, L-1-j],
+                          [dd*hop_vals[i, j], L-1-i, L+j]]
             hops = hops + new_hop
-    kin_neg = [[0.5*epsilon[L-1-i], L-1-i] for i in range(L)]
-    kin_pos = [[0.5*epsilon[L+i], L+i] for i in range(L)] 
-    # kin = [[epsilon[L+i], L+i] for i in range(L)]
-    static = [['++--', hops], ['n', kin_neg], ['n', kin_pos]]
+    if G > -999:
+        kin_neg = [[0.5*epsilon[i], L-1-i] for i in range(L)]
+        kin_pos = [[0.5*epsilon[i], L+i] for i in range(L)]
+        static = [['++--', hops], ['n', kin_neg], ['n', kin_pos]]
+    else:
+        static = [['++--', hops]]
+    if dd != 0 :
+        dds = [['nn',  densdens]]
+        static = [['++--', hops], ['nn', densdens]]
     op_dict = {'static': static}
     H = quantum_operator(op_dict, basis=basis, check_herm=False, check_symm=False)
-    return H
+    return H, basis
+
+def charge_gap(L, G, epsilon, N):
+    Hn, bn = form_ferm_hamiltonian(L, G, epsilon, N)
+    Hm1, bm1 = form_ferm_hamiltonian(L, G, epsilon, N - 0.5)
+    Hp1, bp1 = form_ferm_hamiltonian(L, G, epsilon, N + 0.5)
+    en, _ = Hn.eigh()
+    em1, _ = Hm1.eigh()
+    ep1, _ = Hp1.eigh()
+    return ep1[0] + em1[0] - 2*en[0]
 
 
 def hartree_fock_energy(R1d, L, N, H, cons=True, verbose=False):
@@ -150,6 +177,18 @@ def test_pbcs():
     print(np.min(denergies))
 
 
+def corr_fns(state, start_site, sites, basis):
+    corr = np.zeros(len(sites))
+    for i, s in enumerate(sites):
+        static = [['nn', [[1, start_site, s]]]]
+        op_dict = {'static': static}
+        O = quantum_operator(op_dict, basis=basis,
+                             check_herm=False, check_symm=False,
+                             check_pcon=False)
+        corr[i] = O.matrix_ele(state, state)
+    return corr
+
+
 def test_hf(L, N):
     R = np.diag(np.ones(2*L))
     R1d = np.append(R.flatten(), 1)
@@ -192,10 +231,159 @@ def test_hf(L, N):
     energies['G'] = Ghf
     energies.to_csv('hf_energies_L{}_N{}.csv'.format(L, N))
 
+"""
+Code for calculating spectral functions A(k, omega)
+"""
+def matrix_elts(k, vs, basis):
+    kl = [[1.0, k, k]]
+    ol = [['+-', kl]]
+    od = {'static': ol}
+    op = quantum_operator(od, basis=basis, check_symm=False,
+                          check_herm=False)
+    l = len(vs[0,:])
+    elts = np.zeros((l, l))
+    for i in range(l):
+        for j in range(l):
+            elts[i, j] = op.matrix_ele(vs[:,i], vs[:,j])
+    return elts
+
+
+def akw(omega, m_elts, e1s, e2s, eps=10**-6):
+    l1 = len(e1s)
+    l2 = len(e2s)
+    Gs = np.zeros((l1, l2), dtype=np.complex128)
+    for i, e1 in enumerate(e1s):
+        Gs[i, :] = np.abs(m_elts[i, :])**2/(omega+e1-e2s+1j*eps)
+    G = np.sum(Gs)
+    return -1*G.imag/np.pi
+
+
+def nk(L, v, basis):
+    nks = np.zeros(L)
+    for i in range(L):
+        op = quantum_operator({
+            'static': [['n', [[1.0, i]]]]
+            }, basis=basis)
+        melt = op.matrix_ele(v, v)
+        print(melt)
+        nks[i] = np.real(melt)
+    return nks
+
+
+def constant_op_dict(L, c):
+    co = []
+    for k in range(L):
+        co += [[c, k]]
+    const = [['I', co]]
+    return {'static': const}
+
+
+def find_min_ev(operator, L, basis, n=1):
+    e, v = operator.eigsh(k=1)
+    if e[0] > 0:
+        print('Positive eigenvalue: finding a minimum')
+        cdict = constant_op_dict(L, np.max(e)/L)
+        cop = quantum_operator(cdict, basis=basis)
+        e2, v = (cop-operator).eigsh(k=n)
+        e = np.max(e) - e2
+    if n == 1:
+        return e[0], v[:, 0]
+    else:
+        return e[:n], v[:, :n]
+
+
+def hf_overlaps(L, v0, dim, basis, kf):
+    overlaps = np.zeros(dim, np.complex128)
+    nkf = np.zeros(dim)
+    for i in range(dim):
+        v = np.zeros(dim)
+        v[i] = 1.0
+        overlaps[i] = np.vdot(v0, v)
+        vn = basis.inplace_Op(v, 'n', [kf], 1, np.float64)
+        nkf[i] = np.vdot(vn, v)
+    # Now to filter with only those that have kf + 1 occupied?
+    # nkf = 0.5 + nkf
+    return overlaps, nkf
+
+def angular_momentum_op(L, N, basis):
+    jd = [[i, i] for i in range(2*L)]
+    static = [['n', jd]]
+    op = quantum_operator({'static': static}, basis=basis)
+    return op
+
+def sqrt_curve(l, a, b, c):
+    return a*(l**b) + c
 
 
 if __name__ == '__main__':
-    import sys
-    L = int(sys.argv[1])
-    N = int(sys.argv[2])
-    test_hf(L, N)
+    L = int(input('Max length: '))
+    N = int(input('Number of pairs: '))
+    g = float(input('Coupling: '))
+    ind = int(input('Slater determinant to check overlap with: '))
+    power = int(input('Polynomial power: '))
+
+    k, epsilon = rgk_spectrum(2*L, 1, 0)
+
+
+    cg, _ = charge_gap(L, g, epsilon, N)
+    print('Charge gap at L = {}:'.format(L))
+    print(cg)
+
+    cgs = np.zeros(5)
+    ls = np.arange(L-N-1) + N + 2
+    for i, l in enumerate(ls):
+        cgs[i], _ = charge_gap(l, g, epsilon, N)
+    plt.scatter(1./ls, cgs/ls)
+    plt.show()
+
+    more = input('Press Y to continue: ')
+    if more == 'Y':
+
+        ls = np.arange(L - N - 1) + N + 2
+        print(ls)
+        aks = np.zeros(len(ls))
+
+        for i, l in enumerate(ls):
+            G = g/l
+            print('For L = {}, G = {}'.format(l, G))
+            k, epsilon = rgk_spectrum(2*l, 1, 0)
+            if g == -999:
+                H, basis = form_hyperbolic_hamiltonian(int(l), G, epsilon, N, no_kin=True)
+            else:
+                H, basis = form_hyperbolic_hamiltonian(int(l), G, epsilon, N, no_kin=False)
+                dim = basis.Ns
+                # print(dim)
+                e, v = H.eigh()
+                v0 = v[:, 0]
+                kf = N
+                overlaps, nkfs = hf_overlaps(L, v0, dim, basis, kf)
+                overlaps = np.abs(overlaps)**2
+                print('L = {}'.format(l))
+                print('Occupation of Kf in {}st excited SD'.format(ind))
+                print(nkfs[ind])
+                print('Overlap of GS with {}st excited SD times dim(Hspace)'.format(ind))
+                print(overlaps[ind]/np.mean(overlaps))
+                # aks[i] = overlaps[ind]/np.mean(overlaps)
+                #print(overlaps[ind]*len(e))
+                #aks[i] = overlaps[ind]*len(e)
+                aks[i] = overlaps[ind]
+                print('Ground state energy:')
+                print(e[ind])
+        plt.scatter(ls, aks)
+        plt.show()
+
+        print('Fitting ...')
+        lf = ls.astype(np.float64)
+        p, residuals, rank, singular_values, rcond = np.polyfit(1./lf, aks, power, full=True)
+
+        poly = np.poly1d(p)
+        print(poly)
+        print(residuals)
+        plt.plot(1./ls, poly(1./ls))
+        plt.scatter(1./ls, aks)
+        plt.show()
+
+
+        nks = nk(L, v0, basis)
+        plt.scatter(range(L), nks)
+        plt.show()
